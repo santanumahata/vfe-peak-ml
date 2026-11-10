@@ -115,6 +115,21 @@
    1\% of the apex height.}
 \end{frame}
 
+% ── 6b. How precise can an apex be ─────────────────────────
+\begin{frame}{Why not $\pm$2 samples any more?}
+  \vspace{0pt}\par
+  {\small On these traces the apex itself is only known to about
+   \gold{3 samples} --- noise flattens it.}
+  \par\vspace{2pt}
+  \plotslide[0.84]{precision.png}{1000 held-out simulated traces. Left: readers
+  \emph{told} where each peak is, taking the highest sample nearby. Right: the
+  network retrained with narrower targets and longer training (suppressed zero).}
+  \par\vspace{-4pt}
+  {\tiny\color{lightgrey} On 74\% of traces at least one apex stays within one noise $\sigma$ of
+   its height 3 or more samples away. Not a strict bound --- a reader that knows the pulse
+   shape could average more --- but no change to the network moved the number up.}
+\end{frame}
+
 % ── 7. The hybrid, and why it is not the default ─────────────
 \begin{frame}{A hybrid I tried --- and dropped}
   \vspace{0pt}\par
@@ -141,6 +156,9 @@
           does the current finder take the apex of the \hl{raw} trace or of a
           smoothed one? Against the raw-trace apex, snapping to it gains
           \gold{20 points}.
+    \item \gold{The real noise level.} It decides how precisely an apex can be
+          located at all --- on simulation, about 3 samples. That sets the
+          tolerance to judge the finder by.
     \item Then: refit the simulation to measured traces, fine-tune, and report
           this same table on real held-out boards.
   \end{itemize}

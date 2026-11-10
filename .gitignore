@@ -9,3 +9,5 @@ talk/outputs/*.nav
 talk/outputs/*.out
 talk/outputs/*.snm
 talk/outputs/*.toc
+diagnostics/*_sweep/*/*.pt
+diagnostics/*_sweep/*/*.npz

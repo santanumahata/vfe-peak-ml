@@ -291,6 +291,46 @@ def fig_snap():
     save(fig, "snap.png")
 
 
+# --------------------------------------- 8. how precise can an apex be (main)
+def fig_precision():
+    amb = json.load(open(ROOT / "outputs" / "apex_ambiguity.json"))
+    net = json.load(open(ROOT / "outputs" / "metrics.json"))["all_five_within_2"]
+    names = ["highest sample,\nraw trace", "highest sample,\nsmoothed", "network"]
+    vals = [100 * amb["oracle"]["1"]["all_five_within_2"],
+            100 * amb["oracle"]["3"]["all_five_within_2"], 100 * net]
+
+    sweep_dir = ROOT / "diagnostics" / "2026-11-10_sigma_sweep"
+    runs = [("now", "4 / 25", ROOT / "outputs" / "metrics.json")]
+    for tag, desc in (("A", "1.5 / 25"), ("B", "2 / 25"), ("C", "3 / 25"),
+                      ("D", "4 / 60"), ("E", "2 / 60"), ("F", "2 / 60\n20k")):
+        runs.append((tag, desc, sweep_dir / tag / "metrics.json"))
+    runs = [r for r in runs if r[2].exists()]
+    sv = [100 * json.load(open(r[2]))["all_five_within_2"] for r in runs]
+
+    fig, axes = plt.subplots(1, 2, figsize=(10.4, 3.7),
+                             gridspec_kw=dict(width_ratios=[1, 1.5]))
+    axes[0].bar(np.arange(3), vals, color=[GREY, GREY, GOLD], width=0.6)
+    axes[0].set_xticks(np.arange(3), names, fontsize=8)
+    axes[0].set_ylabel("all five within 2 samples  [%]")
+    axes[0].set_ylim(0, 100)
+    axes[0].grid(axis="y", alpha=0.25, lw=0.5)
+    for xi, v in enumerate(vals):
+        axes[0].text(xi, v + 1.5, f"{v:.0f}", ha="center", color=WHITE, fontsize=9)
+    axes[0].text(0.5, 0.94, "readers told where each peak is", ha="center",
+                 transform=axes[0].transAxes, color=GREY, fontsize=8)
+
+    x = np.arange(len(runs))
+    axes[1].bar(x, sv, color=[GOLD] + [CYAN] * (len(runs) - 1), width=0.6)
+    axes[1].set_xticks(x, [f"{r[0]}\n{r[1]}" for r in runs], fontsize=7.5)
+    axes[1].set_xlabel("run:  target width (samples) / epochs", fontsize=9)
+    axes[1].set_ylim(60, 85)
+    axes[1].grid(axis="y", alpha=0.25, lw=0.5)
+    for xi, v in zip(x, sv):
+        axes[1].text(xi, v + 0.3, f"{v:.1f}", ha="center", color=WHITE, fontsize=8)
+    fig.tight_layout()
+    save(fig, "precision.png")
+
+
 if __name__ == "__main__":
     plt.rcParams["text.usetex"] = False
     seed = fig_anatomy()
@@ -301,3 +341,4 @@ if __name__ == "__main__":
     fig_gallery()
     fig_p0()
     fig_snap()
+    fig_precision()

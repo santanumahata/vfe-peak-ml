@@ -212,3 +212,13 @@ Defaults: window 3, gain 0.05, smooth 1, snap only below confidence 0.50.
 - **Symptom:** median |dt| reads exactly 0.00 for P1-P4.
   **Cause:** apex labels and argmax predictions are both whole samples.
   **Fix:** report within-k fractions, not the median.
+- 2026-11-10 — Tried to recover +-2-sample accuracy on apex labels. Sweep in
+  `diagnostics/2026-11-10_sigma_sweep/` (`python -m src.train --sigma S --epochs E
+  --n-train N --out DIR`): sigma 1.5/2/3 at 25 epochs gave 0.759/0.762/0.766, sigma 4
+  and 2 at 60 epochs 0.734/0.736, sigma 2 at 60 epochs on 20000 traces 0.747; the
+  current model (sigma 4, 25 epochs) stays best at 0.768. Sub-sample decoding
+  (`diagnostics/decode_compare.py`) changed nothing. `diagnostics/apex_ambiguity.py`:
+  readers told where each peak is score 0.569 (raw) / 0.639 (smoothed), and on 74% of
+  traces some apex is flat to within one noise sigma 3+ samples away. Conclusion: on
+  these toys the apex is only defined to ~3 samples; the tolerance should follow the
+  real board noise, measured on real traces.
