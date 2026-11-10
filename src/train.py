@@ -134,4 +134,14 @@ def main():                                                      # - | full trai
 
 
 if __name__ == "__main__":                                       # - | script entry
+    import argparse                                              # - | sweep overrides
+    import os                                                    # - | make the output dir
+    ap = argparse.ArgumentParser()                               # - | defaults reproduce the main run
+    ap.add_argument("--sigma", type=float, default=SIGMA)        # - | heatmap target width
+    ap.add_argument("--epochs", type=int, default=EPOCHS)        # - | training length
+    ap.add_argument("--n-train", type=int, default=N_TRAIN)      # - | training-set size
+    ap.add_argument("--out", default=OUT_DIR)                    # - | keep sweeps out of outputs/
+    a = ap.parse_args()                                          # - | read them
+    SIGMA, EPOCHS, N_TRAIN, OUT_DIR = a.sigma, a.epochs, a.n_train, a.out
+    os.makedirs(OUT_DIR, exist_ok=True)                          # - | sweep dirs may not exist yet
     main()                                                       # - | run it
