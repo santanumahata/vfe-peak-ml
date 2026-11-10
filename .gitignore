@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+scratch/
+.env
+*.github_token
+talk/outputs/*.aux
+talk/outputs/*.log
+talk/outputs/*.nav
+talk/outputs/*.out
+talk/outputs/*.snm
+talk/outputs/*.toc
