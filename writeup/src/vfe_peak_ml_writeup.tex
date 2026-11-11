@@ -322,7 +322,7 @@ training labels.
   mean and, in brackets, the lowest and highest seed. ``Sub-bin'' is the parabola read-out of
   Section~\ref{sec:method}.}
   \label{tab:sweep}
-  \footnotesize\setlength{\tabcolsep}{2.5pt}
+  \footnotesize\setlength{\tabcolsep}{2pt}
   \begin{tabular}{@{}lrrrrrrr@{}}
     \toprule
     model & params [M] & seeds & train [min] & \multicolumn{2}{c}{all five, argmax [\%]} & sub-bin [\%]
@@ -343,9 +343,9 @@ training labels.
   \label{fig:sweep}
 \end{figure}
 
-No larger network clearly beats the smallest one at seed 0, and the U-Nets lie close together while the
-transformers lie lower. Across three seeds, however, the 16/3 U-Net spreads widely while the 32/4 U-Net
-stays within a narrow band (Table~\ref{tab:sweep}). I therefore use the 32/4 U-Net, seed 0, as the report
+At seed 0 the U-Nets lie within a few points of each other and both transformers lie well below
+them. Across three seeds the 16/3 U-Net spreads widely, while the 32/4 U-Net stays within a narrow band
+and has the higher mean of the two (Table~\ref{tab:sweep}). I therefore use the 32/4 U-Net, seed 0, as the report
 model in Sections~\ref{sec:results} and~\ref{sec:failures}.
 
 %% ------------------------------------------------------------
