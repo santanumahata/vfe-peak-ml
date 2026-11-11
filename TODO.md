@@ -9,10 +9,12 @@
 1. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
-- Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF.
+- Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
 - Keep or delete `outputs/toy_gallery.png` (drawn by the pre-widening generator, superseded) — **waiting on:** decision.
 
 ## Done
+- 2026-11-11 — Runbook step 19 (full write-up build), write-up conventions — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`.
+- 2026-11-11 — Full write-up, 16-page LaTeX note from toy study to real traces, unsigned steps in every footer (override given); real numbers are generated macros, PDF and real figures local; deck hybrid panel y-range fixed — `writeup/outputs/vfe_peak_ml_writeup.pdf` (local), `writeup/make_figures.py`, `writeup/src/vfe_peak_ml_writeup.tex`, commit d2179a8.
 - 2026-11-11 — ML-vs-finder PDF rebuilt, 7 pages: pages 1–6 from U-Net 32/4 seed 0 (all four within 0.02 ms 91.1 → 92.4 %, within 0.1 ms 100.0 %, A1 placed on all 26 failure shots), page 7 = model-size table over all configs with seed spread — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local), `src/report_real.py`, commits 8314d07, d837354.
 - 2026-11-11 — Seeds 1 and 2 for U-Net 16/3 and 32/4: 16/3 spreads 87.0–93.2 % (all five within 0.02 ms, sub-bin), 32/4 spreads 92.4–93.0 % — `outputs/real/sweep_seed/` (local).
 - 2026-11-11 — Runbook step 16 carries the sweep loop and seed re-runs; sweep folder naming in Conventions — commit 509116e.
