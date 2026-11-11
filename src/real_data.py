@@ -11,7 +11,8 @@ padded to N_BINS, so a landmark position is a bin index. Usage:
   python -m src.real_data <yaml_root> <results.tar> <members.txt> <data_dir>
 
 writes <data_dir>/real_shots.npz with X (N, 1, N_BINS) raw amps, P (N, 5) bin
-positions (NaN where unknown), and per-shot run / vin / shot / n_found / good fields.
+positions (NaN where unknown), per-shot run / vin / shot / n_found / good fields, and
+the finder's own output on every shot (finder_t_ms, finder_lab), including failures.
 """
 import pathlib                                                   # - | paths
 import subprocess                                                # - | tar extraction
@@ -48,7 +49,9 @@ def collect(yaml_root, have):                                    # - | every sho
             out.append({"run": run, "vin": s.get("vin"), "shot": s.get("shot"),
                         "member": member, "n_found": s.get("n_peaks"), "good": good,
                         "t_ms": [peaks[k]["time_ms"] if good else np.nan
-                                 for k in FINDER_LABELS]})        # - | finder apex times
+                                 for k in FINDER_LABELS],          # - | finder apex times
+                        "found_t_ms": [p["time_ms"] for p in s.get("peaks") or []],  # - | whatever it reported
+                        "found_lab": [p["label"] for p in s.get("peaks") or []]})  # - | and what it called them
     return out
     # Total: time O(total YAML size), space O(shots)
 
@@ -102,7 +105,9 @@ def main():                                                      # - | build the
                         vin=np.array([str(r["vin"]) for r in recs]),
                         shot=np.array([r["shot"] for r in recs]),
                         n_found=np.array([r["n_found"] for r in recs]),
-                        good=np.array([r["good"] for r in recs]))  # O(N N_BINS) | write
+                        good=np.array([r["good"] for r in recs]),
+                        finder_t_ms=np.array([(r["found_t_ms"] + [np.nan] * 4)[:4] for r in recs]),
+                        finder_lab=np.array([",".join(r["found_lab"]) for r in recs]))  # O(N N_BINS) | write
     print(f"{out}  shots={N}  good={sum(r['good'] for r in recs)}  "
           f"runs={len({r['run'] for r in recs})}")
     # Total: time O(N n), space O(N N_BINS)

@@ -53,3 +53,32 @@ def peaks_from_logits(logits):                                   # - | decode he
     conf, pos = prob.max(dim=-1)                                 # O(5n) | best sample per peak channel
     return pos, conf                                             # - | (B,5) positions and confidences
     # Total: time O(B * 5n), space O(B * 5n)
+
+
+class PeakUNetN(nn.Module):
+    """U-Net with a configurable number of levels. Channels double per level up to
+    `cap`. levels=3 has the same layout as PeakUNet; each extra level halves the
+    time axis once more, doubling how much of the trace the bottleneck sees."""
+
+    def __init__(self, base=32, levels=4, n_peaks=5, cap=512):  # - | width, depth, outputs
+        super().__init__()                                       # - | init nn.Module
+        ch = [min(base * 2 ** i, cap) for i in range(levels + 1)]  # - | width per level, last = bottleneck
+        self.enc = nn.ModuleList([conv_block(1 if i == 0 else ch[i - 1], ch[i])
+                                  for i in range(levels)])       # - | encoders
+        self.bottom = conv_block(ch[levels - 1], ch[levels])     # - | bottleneck
+        self.up = nn.ModuleList([nn.ConvTranspose1d(ch[i + 1], ch[i], 2, 2)
+                                 for i in range(levels)])        # - | upsamplers
+        self.dec = nn.ModuleList([conv_block(2 * ch[i], ch[i]) for i in range(levels)])  # - | decoders
+        self.pool = nn.MaxPool1d(2)                              # - | halve the time axis
+        self.head = nn.Conv1d(ch[0], n_peaks, 1)                 # - | per-sample logits
+
+    def forward(self, x):                                        # - | (B,1,n) -> (B,5,n); n divisible by 2^levels
+        skips = []                                               # - | encoder outputs
+        for i, e in enumerate(self.enc):                         # O(levels) | down path
+            x = e(x if i == 0 else self.pool(x))                 # O(n/2^i) | features
+            skips.append(x)                                      # - | keep for the skip
+        x = self.bottom(self.pool(x))                            # O(n/2^L) | widest context
+        for i in reversed(range(len(self.enc))):                 # O(levels) | up path
+            x = self.dec[i](torch.cat([self.up[i](x), skips[i]], 1))  # O(n/2^i) | merge
+        return self.head(x)                                      # O(n) | logits
+        # Total: time O(n * base^2 * levels), space O(n * base)

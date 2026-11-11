@@ -16,7 +16,7 @@ import numpy as np                                               # - | arrays
 import torch                                                     # - | training
 import torch.nn as nn                                            # - | loss
 
-from src.model import PeakUNet                                   # - | convolutional baseline
+from src.model import PeakUNet, PeakUNetN                        # - | convolutional baselines
 from src.train import normalise                                  # - | same per-trace scaling as the toys
 
 LABELS = ["P0", "P1", "P2", "P3", "P4"]                          # - | inrush, A1, B1, A2, B2
@@ -101,12 +101,24 @@ def scores(pred, P, dt_ms):                                      # - | errors in
     return res
 
 
-def predict(model, X, device, batch=64):                         # - | argmax positions + confidences
+def predict(model, X, device, batch=64, subbin=False):           # - | positions + confidences
+    """argmax per channel; with subbin, refined by a parabola through the top three bins."""
     model.eval(); pos, conf = [], []
     with torch.no_grad():
         for i in range(0, len(X), batch):
             p = torch.sigmoid(model(torch.from_numpy(X[i:i + batch]).to(device)))
-            c, a = p.max(-1); pos.append(a.cpu().numpy()); conf.append(c.cpu().numpy())
+            c, a = p.max(-1)
+            q = a.float()
+            if subbin:
+                n = p.shape[-1]
+                am = a.clamp(1, n - 2)
+                l = p.gather(-1, (am - 1).unsqueeze(-1)).squeeze(-1)
+                m = p.gather(-1, am.unsqueeze(-1)).squeeze(-1)
+                r = p.gather(-1, (am + 1).unsqueeze(-1)).squeeze(-1)
+                den = l - 2 * m + r
+                off = torch.where(den.abs() > 1e-9, 0.5 * (l - r) / den, torch.zeros_like(den))
+                q = am.float() + off.clamp(-1, 1)
+            pos.append(q.cpu().numpy()); conf.append(c.cpu().numpy())
     return np.concatenate(pos).astype(float), np.concatenate(conf)
 
 
@@ -119,9 +131,14 @@ def main():
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--data", default="data/real_shots.npz")
     ap.add_argument("--out", default="outputs/real/unet")
+    ap.add_argument("--base", type=int, default=16)               # - | U-Net width
+    ap.add_argument("--levels", type=int, default=3)              # - | U-Net depth
+    ap.add_argument("--d", type=int, default=128)                 # - | transformer width
+    ap.add_argument("--tdepth", type=int, default=4)              # - | transformer layers
+    ap.add_argument("--seed", type=int, default=0)                # - | init / shuffling / augmentation
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    torch.manual_seed(0); rng = np.random.default_rng(0)
+    torch.manual_seed(a.seed); rng = np.random.default_rng(a.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     d = np.load(a.data)
@@ -132,7 +149,11 @@ def main():
           f"val {va.sum()} / {len(set(d['run'][va]))} | hard {hard.sum()} / "
           f"{len(set(d['run'][hard]))} on {device}", flush=True)
 
-    model = (PeakUNet() if a.arch == "unet" else PeakTransformer()).to(device)
+    if a.arch == "unet":
+        model = PeakUNet(a.base) if a.levels == 3 else PeakUNetN(a.base, a.levels)
+    else:
+        model = PeakTransformer(d=a.d, depth=a.tdepth, heads=max(4, a.d // 32))
+    model = model.to(device)
     n_params = sum(p.numel() for p in model.parameters())
     opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.OneCycleLR(
@@ -157,18 +178,23 @@ def main():
 
     pv, cv = predict(model, X[va], device)
     ph, ch = predict(model, X[hard], device)
+    pvs, _ = predict(model, X[va], device, subbin=True)
+    phs, _ = predict(model, X[hard], device, subbin=True)
     hard_good = d["good"][hard]
     m = {"arch": a.arch, "params": n_params, "device": device, "epochs": a.epochs,
          "sigma_bins": a.sigma, "dt_ms": dt_ms, "wall_s": round(time.time() - t0, 1),
          "n_train": int(tr.sum()), "n_val": int(va.sum()), "n_hard": int(hard.sum()),
+         "base": a.base, "levels": a.levels, "d": a.d, "tdepth": a.tdepth, "seed": a.seed,
          "val": scores(pv, P[va], dt_ms),
+         "val_subbin": scores(pvs, P[va], dt_ms),
          "hard_runs_clean_shots": scores(ph[hard_good], P[hard][hard_good], dt_ms),
          "history": hist}
     with open(f"{a.out}/metrics.json", "w") as f:
         json.dump(m, f, indent=2)
     torch.save(model.state_dict(), f"{a.out}/model.pt")
     np.savez_compressed(f"{a.out}/predictions.npz", val_pos=pv, val_conf=cv,
-                        hard_pos=ph, hard_conf=ch, val_idx=np.flatnonzero(va),
+                        hard_pos=ph, hard_conf=ch, val_pos_subbin=pvs, hard_pos_subbin=phs,
+                        val_idx=np.flatnonzero(va),
                         hard_idx=np.flatnonzero(hard))
     print(json.dumps({k: v for k, v in m.items() if k not in ("history",)}, indent=1))
 

@@ -16,3 +16,4 @@ diagnostics/*_sweep/*/*.npz
 data/
 diagnostics/2026-11-11_real_*
 outputs/real/
+.claude-backups/
