@@ -2,9 +2,11 @@
 
   python -m src.report_real <out.pdf>
 
-Reads data/real_shots.npz and outputs/real/{unet,transformer}/. Every number on the
+Reads data/real_shots.npz, outputs/real/{unet,transformer}/ and
+outputs/real/sweep*/<tag>[_s<seed>]/metrics.json (model-size page). Every number on the
 pages is computed here from those files.
 """
+import glob
 import json
 import sys
 import textwrap
@@ -219,6 +221,73 @@ def page_confidence(pdf, d, m):
     return np.median(ca_clean), np.median(ca_bad), ca_bad.min()
 
 
+def sweep_runs():                                   # outputs/real/sweep*/<tag>[_s<seed>]/metrics.json
+    runs = {}
+    for p in sorted(glob.glob("outputs/real/sweep*/*/metrics.json")):
+        tag = p.split("/")[-2].split("_s")[0]
+        runs.setdefault(tag, []).append(json.load(open(p)))
+    return runs
+
+
+def page_sweep(pdf, runs):
+    def name(r):
+        return (f"U-Net base {r['base']}, {r['levels']} levels" if r["arch"] == "unet"
+                else f"Transformer d={r['d']}, {r['tdepth']} layers")
+
+    def span(x, f="%.1f"):
+        x = np.asarray(x)
+        return f % x.mean() if len(x) == 1 else f"{f % x.mean()} ({f % x.min()}-{f % x.max()})"
+
+    order = sorted(runs, key=lambda t: runs[t][0]["params"])
+    rows = []
+    for t in order:
+        rs = runs[t]
+        rows.append([name(rs[0]), f"{rs[0]['params']/1e6:.2f}", str(len(rs)),
+                     span([r["wall_s"] / 60 for r in rs]),
+                     span([100 * r["val"]["all_five_within_0.02ms"] for r in rs]),
+                     span([100 * r["val"]["all_five_within_0.05ms"] for r in rs]),
+                     span([100 * r["val_subbin"]["all_five_within_0.02ms"] for r in rs]),
+                     span([1e3 * r["val_subbin"]["per_peak"]["P1"]["median_ms"] for r in rs]),
+                     span([100 * r["val"]["gross_any"] for r in rs])])
+    fig = plt.figure(figsize=A4)
+    fig.text(0.05, 0.93, "Model size: does a bigger network agree better?", fontsize=16,
+             weight="bold")
+    ax = fig.add_axes([0.03, 0.5, 0.94, 0.38]); ax.axis("off")
+    tb = ax.table(cellText=rows, colLabels=[
+        "model", "parameters\n[M]", "seeds", "training\n[min]",
+        "all five within\n0.02 ms [%]\nargmax", "all five within\n0.05 ms [%]\nargmax",
+        "all five within\n0.02 ms [%]\nsub-bin", "A1 median\nerror [us]\nsub-bin",
+        "any landmark\n> 1 ms off [%]"], loc="upper center", cellLoc="center",
+        colWidths=[0.2] + [0.1] * 8)
+    tb.auto_set_font_size(False); tb.set_fontsize(8.5); tb.scale(1, 1.9)
+    for (r, c), cell in tb.get_celld().items():
+        if r == 0:
+            cell.set_height(cell.get_height() * 1.9)
+    ax2 = fig.add_axes([0.08, 0.1, 0.42, 0.3])
+    for t in order:
+        rs = runs[t]; c = C_M if rs[0]["arch"] == "unet" else C_T
+        ax2.scatter([r["params"] / 1e6 for r in rs],
+                    [100 * r["val_subbin"]["all_five_within_0.02ms"] for r in rs],
+                    color=c, s=22)
+    ax2.scatter([], [], color=C_M, label="U-Net"); ax2.scatter([], [], color=C_T, label="Transformer")
+    ax2.set_xscale("log"); ax2.set_xlabel("parameters [M]")
+    ax2.set_ylabel("all five within 0.02 ms [%], sub-bin"); ax2.grid(alpha=0.3)
+    ax2.legend(fontsize=8)
+    r0 = runs[order[0]][0]
+    fig.text(0.56, 0.4, textwrap.fill(
+        f"Every model is trained on the same run split ({r0['n_train']} training shots) for "
+        f"{r0['epochs']} epochs and scored on the same {r0['n_val']} held-out shots, against the "
+        f"training labels: P0 by rule, A1-B2 = the existing finder's times. Unlike pages 1-2, "
+        f"these columns include P0. Where a model has more than one seed, the cell shows the "
+        f"mean and, in brackets, the lowest and highest seed. Sub-bin = parabola through the "
+        f"three highest bins of each channel instead of the highest bin alone. Each point in "
+        f"the plot is one training run.", 62), fontsize=9, va="top")
+    fig.text(0.02, 0.03, "The sub-bin read-out is also an unsigned step.", fontsize=6.5,
+             color="#555555")
+    footer(fig); pdf.savefig(fig); plt.close(fig)
+    return rows
+
+
 def main():
     out = sys.argv[1]
     d, m = load()
@@ -236,6 +305,7 @@ def main():
                       "blue o = ML")
         rep = page_repeatability(pdf, d, m)
         conf = page_confidence(pdf, d, m)
+        sw = page_sweep(pdf, sweep_runs())
         info = pdf.infodict(); info["Title"] = "ML vs existing peak finder, LVR traces"
         info["Author"] = "Santanu Mahata"
     print(out)
@@ -244,6 +314,8 @@ def main():
     print("   repeatability median spread finder/ML [us]:",
           [f"{a:.1f}/{b:.1f}" for a, b, _ in rep])
     print("   A1 confidence clean / failures / min failures: %.3f %.3f %.3f" % conf)
+    for r in sw:
+        print("   sweep", r)
 
 
 if __name__ == "__main__":
