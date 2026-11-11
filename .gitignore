@@ -11,3 +11,8 @@ talk/outputs/*.snm
 talk/outputs/*.toc
 diagnostics/*_sweep/*/*.pt
 diagnostics/*_sweep/*/*.npz
+
+# real board data and anything drawn from it: not for the public repo without an explicit OK
+data/
+diagnostics/2026-11-11_real_*
+outputs/real/
