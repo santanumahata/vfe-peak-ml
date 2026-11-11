@@ -6,13 +6,17 @@
 - Nothing in flight.
 
 ## Next
-1. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+1. Decide whether the P0 rule's choice is right on the two held-out 12 V shots where the network puts P0 on the earlier ripple (rule: small bump at the start of the rise; network confidence low) — `diagnostics/2026-11-11_real_p0_misses.png` (local).
+2. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
-- Keep or delete `outputs/toy_gallery.png` (drawn by the pre-widening generator, superseded) — **waiting on:** decision.
 
 ## Done
+- 2026-11-11 — Both PDFs rebuilt on the new P0: ML-vs-finder (7 pages) and write-up (11 pages, real data only); report model stays U-Net 32/4 seed 0 — `outputs/real/2026-11-11_ml_vs_finder.pdf`, `writeup/outputs/vfe_peak_ml_writeup.pdf` (local).
+- 2026-11-11 — All 11 models retrained on the new P0 labels (report model, transformer, 7-config sweep, seeds 1–2 for 16/3 and 32/4); old models kept in `outputs/real/old_p0inrush/`, old dataset in `data/real_shots_p0inrush.npz` (local).
+- 2026-11-11 — P0 redefined as the peak just before A1 (walking rule, `src/real_data.py`), checked on 16 plotted shots across all voltages and the failing cases — `diagnostics/real_p0_rule.py`, commit 6ef0dc9.
+- 2026-11-11 — Simulated data removed from the repo (toy code, outputs, deck, toy figures, toy runbook steps); `outputs/toy_gallery.png` deleted with it — commit 6ef0dc9.
 - 2026-11-11 — Runbook step 19 (full write-up build), write-up conventions — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`.
 - 2026-11-11 — Full write-up, 16-page LaTeX note from toy study to real traces, unsigned steps in every footer (override given); real numbers are generated macros, PDF and real figures local; deck hybrid panel y-range fixed — `writeup/outputs/vfe_peak_ml_writeup.pdf` (local), `writeup/make_figures.py`, `writeup/src/vfe_peak_ml_writeup.tex`, commit d2179a8.
 - 2026-11-11 — ML-vs-finder PDF rebuilt, 7 pages: pages 1–6 from U-Net 32/4 seed 0 (all four within 0.02 ms 91.1 → 92.4 %, within 0.1 ms 100.0 %, A1 placed on all 26 failure shots), page 7 = model-size table over all configs with seed spread — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local), `src/report_real.py`, commits 8314d07, d837354.
