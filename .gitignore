@@ -17,3 +17,5 @@ data/
 diagnostics/2026-11-11_real_*
 outputs/real/
 .claude-backups/
+writeup/plots/real/
+writeup/outputs/

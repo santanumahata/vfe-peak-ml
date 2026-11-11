@@ -185,7 +185,7 @@ def fig_methods():
     axes[0].bar(np.arange(4), val, color=cols, width=0.6)
     axes[0].set_xticks(np.arange(4), nice, fontsize=8)
     axes[0].set_ylabel(r"all five within 2 samples  [%]")
-    axes[0].set_ylim(80, 92)
+    axes[0].set_ylim(60, 85)
     axes[0].grid(axis="y", alpha=0.25, lw=0.5)
     for xi, v in zip(np.arange(4), val):
         axes[0].text(xi, v + 0.15, f"{v:.1f}", ha="center", color=WHITE, fontsize=9)
