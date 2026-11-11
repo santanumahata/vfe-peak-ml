@@ -16,10 +16,9 @@ import numpy as np                                               # - | arrays
 import torch                                                     # - | training
 import torch.nn as nn                                            # - | loss
 
-from src.model import PeakUNet, PeakUNetN                        # - | convolutional baselines
-from src.train import normalise                                  # - | same per-trace scaling as the toys
+from src.model import PeakUNet, PeakUNetN, normalise             # - | networks and input scaling
 
-LABELS = ["P0", "P1", "P2", "P3", "P4"]                          # - | inrush, A1, B1, A2, B2
+LABELS = ["P0", "P1", "P2", "P3", "P4"]                          # - | peak before A1, A1, B1, A2, B2
 VAL_FRAC = 0.2                                                   # - | fraction of clean runs held out
 SHIFT = 300                                                      # - | max augmentation shift, bins (3 ms)
 TOLS_MS = (0.02, 0.05, 0.1)                                      # - | reporting thresholds
@@ -144,7 +143,9 @@ def main():
     d = np.load(a.data)
     X = normalise(d["X"]); P = d["P"].astype(np.float32); dt_ms = float(d["dt_ms"][0])
     tr, va, hard = split_runs(d["run"], d["n_found"])
-    tr &= d["good"]                                              # - | only fully labelled shots train
+    labelled = d["good"] & np.isfinite(d["P"][:, 0])               # - | all five labels known
+    tr &= labelled                                              # - | only fully labelled shots train
+    va &= labelled                                              # - | and only those are scored
     print(f"train {tr.sum()} shots / {len(set(d['run'][tr]))} runs | "
           f"val {va.sum()} / {len(set(d['run'][va]))} | hard {hard.sum()} / "
           f"{len(set(d['run'][hard]))} on {device}", flush=True)
@@ -180,7 +181,7 @@ def main():
     ph, ch = predict(model, X[hard], device)
     pvs, _ = predict(model, X[va], device, subbin=True)
     phs, _ = predict(model, X[hard], device, subbin=True)
-    hard_good = d["good"][hard]
+    hard_good = labelled[hard]
     m = {"arch": a.arch, "params": n_params, "device": device, "epochs": a.epochs,
          "sigma_bins": a.sigma, "dt_ms": dt_ms, "wall_s": round(time.time() - t0, 1),
          "n_train": int(tr.sum()), "n_val": int(va.sum()), "n_hard": int(hard.sum()),

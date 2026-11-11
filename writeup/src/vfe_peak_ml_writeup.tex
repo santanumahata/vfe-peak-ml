@@ -1,6 +1,6 @@
 %% ============================================================
 %%  A learned peak finder for VFE/LVR board QC current traces
-%%  Full write-up: toy study, real traces, comparison with the existing finder
+%%  Full write-up: real tester traces, comparison with the existing finder
 %%  Build (from writeup/src): pdflatex twice. Figures: python -m writeup.make_figures
 %% ============================================================
 \documentclass[11pt,a4paper]{article}
@@ -21,7 +21,7 @@
 \input{../plots/real/numbers.tex}
 
 \newcommand{\us}{\,\textmu s}
-\newcommand{\unsigned}{Unsigned algorithm steps (not yet signed off): dataset build and the inrush (P0) rule;
+\newcommand{\unsigned}{Unsigned algorithm steps (not yet signed off): dataset build and the P0 rule (peak just before A1);
   run-level split; network training; peak read-out (argmax per output channel on 10\us\ bins; also the sub-bin read-out).}
 
 \pagestyle{fancy}
@@ -34,7 +34,7 @@
 \setlength{\footskip}{30pt}
 
 \title{A learned peak finder for VFE/LVR board quality-control traces\\[4pt]
-  \large From a toy study to real tester data, compared with the existing finder}
+  \large Trained on real tester data and compared with the existing finder}
 \author{Santanu Mahata}
 \date{11 November 2026}
 
@@ -45,8 +45,7 @@
 Board quality control reads five landmarks, P0--P4, off a current trace recorded for every shot. A
 hard-coded finder does this today and on some shots reports three peaks instead of four. I train a 1D
 convolutional network that outputs one heat-map per landmark and reads each position as the maximum of
-its channel, with the height of that maximum as a per-landmark confidence. I first develop it on simulated
-traces, then train it on \NShots\ shots from \NRuns\ four-peak runs of the LVR tester, with the existing
+its channel, with the height of that maximum as a per-landmark confidence. I train it on \NShots\ shots from \NRuns\ four-peak runs of the LVR tester, with the existing
 finder's times as labels. On \NVal\ shots from \NValRuns\ runs never used in training, the network agrees
 with the finder to a median of \MedUnet\us; all four peaks lie within 0.02\,ms of the finder on \TwoUnet\%
 of shots and within 0.1\,ms on \TenUnet\%. On the \NFail\ shots where the finder reported only three
@@ -61,7 +60,7 @@ they are named at the foot of every page.
 \section{Introduction}
 
 Each VFE/LVR board under test is powered up repeatedly, and for every shot the tester records the input
-current on scope channel C4. Five landmarks are read off that trace: the inrush spike, which I call P0,
+current on scope channel C4. Five landmarks are read off that trace: the peak just before A1, which I call P0,
 and four peaks that the existing finder names A1, B1, A2 and B2. I call those four P1--P4, in time order.
 
 The existing finder is hard-coded: fixed thresholds and windows. On some shots it misidentifies the
@@ -70,8 +69,7 @@ reported three peaks instead of four on \NFail\ shots (Section~\ref{sec:failures
 
 My aim is a finder that learns the landmark positions from labelled traces instead of hand-tuned
 thresholds, and that reports a confidence for each landmark, so that doubtful shots can be flagged
-automatically. This note describes the method (Section~\ref{sec:method}), the toy study I used to develop
-it before real traces were available (Section~\ref{sec:toy}), the real data and how I built a training set
+automatically. This note describes the method (Section~\ref{sec:method}), the real data and how I built a training set
 from it (Section~\ref{sec:data}), training on real traces (Section~\ref{sec:training}), the comparison with
 the existing finder (Sections~\ref{sec:results} and~\ref{sec:failures}), a study of model size and training
 seed (Section~\ref{sec:sweep}), and what is still open (Section~\ref{sec:status}).
@@ -88,8 +86,7 @@ position $p_k$,
   y_k(t) = \exp\!\left[-\tfrac{1}{2}\,\frac{(t-p_k)^2}{\sigma^2}\right],
 \end{equation}
 with the per-sample binary cross-entropy between $\mathrm{sigmoid}(z_k(t))$ and $y_k(t)$ as loss, where
-$z_k$ is the network's logit. The target width is $\sigma = 4$ samples on the toys and
-$\sigma = \SigmaBins$ bins (30\us) on real traces.
+$z_k$ is the network's logit. The target width is $\sigma = \SigmaBins$ bins (30\us).
 
 \paragraph{Read-out and confidence.}
 The reported position of landmark $k$ is $\hat p_k = \arg\max_t \mathrm{sigmoid}(z_k(t))$, and its
@@ -120,167 +117,6 @@ convolution back to full resolution fused with the stem's features.
 \paragraph{Why not regress five numbers.}
 A network that regresses the five positions directly gives no per-landmark confidence, which is the part
 quality control needs. I did not pursue it.
-
-%% ------------------------------------------------------------
-\section{Toy study}
-\label{sec:toy}
-
-Before real traces were available I developed the method on simulated traces, written from a verbal
-description of the waveform. The numbers in this section are measured on simulation and are a check of
-the method, not a result about boards.
-
-\subsection{Generator}
-A toy trace has 1024 samples (Figure~\ref{fig:anatomy}). A train of small spikes ends in P0, the last of them; P1 follows 10--60 samples later. P1--P4 rise in height within a trace, and after
-each one the floor settles higher than before. Small decoy bumps ride on those floors. Rise and decay
-widths are drawn independently. Table~\ref{tab:toygen} lists every range; all of them are guesses from the
-description. Labels sit on the visible apex of the noiseless waveform; draws in which a landmark has no
-visible apex are redrawn.
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.9\textwidth]{toy/anatomy.png}
-  \caption{One simulated trace. Markers are the five true landmark positions. Amplitude in arbitrary
-  units; shape only.}
-  \label{fig:anatomy}
-\end{figure}
-
-\begin{table}[!htbp]
-  \centering\small
-  \caption{Toy generator settings (\texttt{src/toy\_waveforms.py}, \texttt{ToyConfig}).}
-  \label{tab:toygen}
-  \begin{tabular}{@{}ll@{}}
-    \toprule
-    ingredient & range used \\
-    \midrule
-    trace length & 1024 samples \\
-    P1--P4 live in & samples 143--922 \\
-    P0 apex ahead of P1 apex by & 10--60 samples \\
-    spikes before P0 & 8--20, height 0.01--0.06 \\
-    P0 height & 0.04--0.09 \\
-    P1--P4 heights & 0.25--1.00, increasing within a trace \\
-    leading-edge width & 1.5--14 samples \\
-    trailing decay & 2.5--30 samples, drawn independently \\
-    per-trace shape tilt & 0.5--2.0 \\
-    fraction of a peak left as floor & 0.25--0.55 \\
-    floor step width & 3--10 samples \\
-    decoy bumps per floor & 2--6, at 4--18\% of the local step \\
-    noise & 0.004--0.015, plus 0.2\% single-sample glitches \\
-    landmark spacing jitter & 50\% of the mean spacing \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.95\textwidth]{toy/gallery.png}
-  \caption{Six independent draws with the same generator settings. Each panel is scaled on its own.}
-  \label{fig:gallery}
-\end{figure}
-
-\subsection{Training and results}
-I trained the 0.46\,M-parameter U-Net on 8000 simulated traces for 25 epochs (Adam, learning rate
-$10^{-3}$ with cosine decay, batch 32; 125\,s on one GPU) and tested it on 1000 held-out traces.
-Figure~\ref{fig:heatmap} shows one held-out trace with the five channel outputs. All five landmarks fall
-within 2 samples of the truth on 76.8\% of traces and within 4 samples on 89.0\%; at least one is more
-than 15 samples off on 2.0\%. Figure~\ref{fig:perpeak} breaks this down by landmark.
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.9\textwidth]{toy/heatmap_demo.png}
-  \caption{Top: a held-out simulated trace, true positions dashed, network positions solid. Bottom: the
-  five channel outputs, with the confidence each one reaches.}
-  \label{fig:heatmap}
-\end{figure}
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.85\textwidth]{toy/perpeak.png}
-  \caption{1000 held-out simulated traces: fraction where each landmark lies within 2 (left) and 4 (right)
-  samples of the visible apex. Suppressed zero.}
-  \label{fig:perpeak}
-\end{figure}
-
-The misses are mostly 3 samples, just over the 2-sample line. P0 misses on 40 traces, 8 of them by more
-than 15 samples; about half land earlier, in the spike train, and none on P1
-(Figure~\ref{fig:p0errors}).
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.7\textwidth]{toy/p0_errors.png}
-  \caption{Absolute error on held-out simulated traces: P0 (1000 entries, filled) against P1--P4 pooled
-  (4000 entries, outline). Log scale; dotted line at 2 samples; overflow in the last bin.}
-  \label{fig:p0errors}
-\end{figure}
-
-\subsection{How precisely can an apex be located?}
-I checked whether the 2-sample criterion is reachable on these traces at all. Readers that are told where
-each peak is and take the highest sample nearby reach a lower all-five-within-2 fraction than the network
-(Figure~\ref{fig:precision}, left). On 74\% of traces at least one apex has another sample within one noise
-$\sigma$ of its height three or more samples away, so on these traces an apex is known to about 3 samples.
-This is not a strict bound: a reader that knows the pulse shape could average over more samples. Narrower
-targets, longer training and more training data did not move the network's number up
-(Figure~\ref{fig:precision}, right).
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.95\textwidth]{toy/precision.png}
-  \caption{Left: readers told where each peak is, taking the highest sample of the raw or smoothed trace,
-  against the network. Right: the network retrained with different target widths and epochs (one run uses
-  20\,k training traces). 1000 held-out simulated traces; suppressed zero on the right.}
-  \label{fig:precision}
-\end{figure}
-
-\subsection{Snapping to the apex}
-Each reported position can be moved onto the nearby local maximum of the noisy trace. Scored against the
-clean apex, this makes no difference; scored against the apex of the noisy trace, always snapping gains
-20 points (Figure~\ref{fig:snap}). Which of the two the existing finder reports decides whether snapping
-is worth doing. On real traces I later established that the finder reports the raw sample maximum
-(Section~\ref{sec:data}).
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.95\textwidth]{toy/snap.png}
-  \caption{Left: all-five-within-2 against the fraction of positions moved by the snap. Right: network
-  alone and always-snap, scored against the clean apex and against the noisy-trace apex.}
-  \label{fig:snap}
-\end{figure}
-
-\subsection{A two-stage hybrid, and why I dropped it}
-I also tried scanning the trace for local maxima and letting a second-stage classifier assign candidates
-to landmarks. Table~\ref{tab:hybrid} and Figure~\ref{fig:methods} compare it with the network alone. With
-the network's own maxima added to the candidate list, the true landmark is among the candidates on 1000
-of 1000 traces, and the network's answer breaks the time ordering on 1 of 1000 traces, so neither recall
-nor ordering is the limitation. The second-stage ranker is a worse judge than the network output it
-reads; I kept it as a switch, not the default.
-
-\begin{table}[!htbp]
-  \centering\small
-  \caption{Hybrid variants on the same 1000 held-out traces; the ranker was trained on 2000 separate
-  ones (\texttt{outputs/ablation.json}).}
-  \label{tab:hybrid}
-  \begin{tabular}{@{}lcc@{}}
-    \toprule
-    method & all five within 2 samples & any landmark $>15$ samples off \\
-    \midrule
-    network alone & 76.8\% & 2.0\% \\
-    scan + ranker, ordered decode & 71.2\% & 2.1\% \\
-    scan + ranker, plain decode & 71.4\% & 2.1\% \\
-    scan + ranker, greedy & 71.2\% & 2.4\% \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\begin{figure}[!htbp]
-  \centering
-  \includegraphics[width=0.95\textwidth]{toy/methods.png}
-  \caption{Left: all five within 2 samples for each method. Right: how often the true landmark is among
-  the scanned candidates, against the scan threshold; labels give candidates per trace.}
-  \label{fig:methods}
-\end{figure}
-
-Other variants that did not beat the base model on toys: up-weighting the P0 channel in the loss, labels
-on the rising edge instead of the apex (replaced by apex labels), and changes to target width, epoch
-count and decoder.
 
 %% ------------------------------------------------------------
 \section{Real data}
@@ -317,8 +153,12 @@ Figure~\ref{fig:trace} shows one shot.
 
 \subsection{Labels}
 \begin{itemize}
-  \item \textbf{P0} is not reported by the finder. I label it by rule: the highest bin between $-5$ and
-        $+3$\,ms.
+  \item \textbf{P0} is not reported by the finder. I label it by rule as the peak just before A1. Starting from the last bin before A1 where the
+        current is below 0.4 of A1's height (on the rise into A1), I walk back while the current keeps
+        falling, to the dip, then on while it keeps rising, to the first local maximum; steps of up to 5\,mA
+        against the direction are tolerated. Where the walk finds no peak or runs more than 3\,ms before
+        A1 (\NNoPzero\ shots), P0 is left unlabelled and the shot is used neither in training nor in
+        scoring. The rule needs A1, so P0 has no label on the finder's failure shots.
   \item \textbf{P1--P4} are the finder's times for A1, B1, A2, B2, converted to bin index. Only shots where
         the finder reported all four are used for training.
 \end{itemize}
@@ -431,7 +271,7 @@ Figure~\ref{fig:clean} shows four held-out shots drawn at random, with both find
 \begin{figure}[!htbp]
   \centering
   \includegraphics[width=0.95\textwidth]{real/clean_shots.png}
-  \caption{Four held-out shots, 15--27\,ms after the trigger. Red $\times$: existing finder, with its labels.
+  \caption{Four held-out shots, 13.5--27\,ms after the trigger. Red $\times$: existing finder, with its labels.
   Blue $\circ$: network.}
   \label{fig:clean}
 \end{figure}
@@ -520,7 +360,7 @@ network training; and the peak read-out (argmax per channel on 10\us\ bins, and 
 \begin{itemize}
   \item On clean shots the labels are the existing finder's own times, so agreement measures how well the
         network reproduces the finder, not how close either is to a true position.
-  \item The P0 label is a rule (highest bin between $-5$ and $+3$\,ms), and the network reproduces it.
+  \item The P0 label is a rule (the peak just before A1), and the network reproduces it.
   \item On the failure shots there is no reference for A1.
   \item The network's positions are on a 10\us\ grid; the finder's are on the 200\,ns samples.
   \item The failure shots come from only \NFailRuns\ runs.
@@ -542,14 +382,6 @@ with expected outputs, is in \texttt{docs/RUNBOOK\_vfe\_peak\_ml-DETAIL.md}.
 
 \begin{small}
 \begin{verbatim}
-# toys
-micromamba run -n $ENV python -m src.train
-micromamba run -n $ENV python -m src.hybrid
-micromamba run -n $ENV python -m diagnostics.hybrid_ablation
-micromamba run -n $ENV python -m diagnostics.refine_sweep
-micromamba run -n $ENV python -m diagnostics.refine_gated
-micromamba run -n $ENV python -m diagnostics.apex_ambiguity
-
 # real data
 micromamba run -n $ENV python -m src.real_data \
     <yaml_dir> ~/Downloads/results.tar <members.txt> data

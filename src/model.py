@@ -1,7 +1,17 @@
 """Fully convolutional 1D U-Net that emits one heatmap channel per peak (P0..P4)."""
 
+import numpy as np                                               # - | input scaling
 import torch                                                     # - | tensors and autograd
 import torch.nn as nn                                            # - | layers
+
+
+def normalise(X):                                                # - | per-trace scaling
+    """Zero-median, unit-max scaling so absolute amps never matter."""
+    med = np.median(X, axis=-1, keepdims=True)                   # O(Nn) | robust baseline per trace
+    out = X - med                                                # O(Nn) | remove the pedestal
+    scale = np.max(np.abs(out), axis=-1, keepdims=True) + 1e-6   # O(Nn) | peak-to-peak scale
+    return (out / scale).astype(np.float32)                      # O(Nn) | scaled trace
+    # Total: time O(N n), space O(N n)
 
 
 def conv_block(c_in, c_out):                                     # - | two convs with norm and activation

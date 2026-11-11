@@ -20,7 +20,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 PEAKS = ["A1", "B1", "A2", "B2"]                   # P1..P4
 C_F, C_M, C_T = "#C0392B", "#1F77B4", "#7F7F7F"    # finder, ML (U-Net), transformer
 UNSIGNED = ("Unsigned algorithm steps (not yet signed off): dataset build and the "
-            "inrush (P0) rule; run-level split; network training; peak read-out "
+            "P0 rule (peak before A1); run-level split; network training; peak read-out "
             "(argmax of each output channel, 10 us bins).")
 A4 = (11.69, 8.27)
 
@@ -76,7 +76,7 @@ def page_summary(pdf, d, m):
         f"{m['unet']['metrics'].get('seed', 0)}) that outputs one heat-map per landmark, trained on the "
         f"finder's times from {m['unet']['metrics']['n_train']} shots in "
         f"{len(set(d['run'])) - n_runs_val - len(set(d['run'][bad]))} runs. Five landmarks: "
-        f"P0 the inrush spike (by a simple rule, the finder does not report it), and "
+        f"P0 the peak just before A1 (by a rule, the finder does not report it), and "
         f"P1-P4 = A1, B1, A2, B2. A transformer variant was trained on the same split for "
         f"comparison.\n\n"
         f"How it is tested. Split by run, never by shot. {len(v)} shots in {n_runs_val} "
@@ -137,7 +137,7 @@ def page_agreement(pdf, d, m):
 
 def draw_shot(ax, d, m, i, finder_marks=True):
     tm = ms(d, np.arange(d["X"].shape[-1]))
-    w = (tm > 15) & (tm < 27)
+    w = (tm > 13.5) & (tm < 27)                     # P0 (peak before A1) to past B2
     y = d["X"][i, 0]
     ax.plot(tm[w], y[w], color="#222222", lw=0.8)
     if finder_marks:
@@ -147,10 +147,10 @@ def draw_shot(ax, d, m, i, finder_marks=True):
                 ax.plot(t, y[b], "x", color=C_F, ms=9, mew=2)
                 ax.annotate(lab, (t, y[b]), xytext=(0, 9), textcoords="offset points",
                             ha="center", color=C_F, fontsize=7)
-    for k in range(1, 5):
+    for k, lab in enumerate(["P0"] + PEAKS):
         b = int(m["unet"]["pos"][i, k])
         ax.plot(tm[b], y[b], "o", mfc="none", mec=C_M, ms=10, mew=1.6)
-        ax.annotate(PEAKS[k - 1], (tm[b], y[b]), xytext=(0, -15), textcoords="offset points",
+        ax.annotate(lab, (tm[b], y[b]), xytext=(0, -15), textcoords="offset points",
                     ha="center", color=C_M, fontsize=7)
     ax.set_title(f"{d['run'][i]}   {d['vin'][i]}   shot {d['shot'][i]}", fontsize=8, loc="left")
     ax.set_ylabel("I [A]")

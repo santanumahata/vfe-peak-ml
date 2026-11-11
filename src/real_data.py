@@ -2,7 +2,9 @@
 
 Each 4-peak shot gives one input-current trace (scope channel C4) and the existing
 finder's apex times for A1, B1, A2, B2. Five landmarks are learned:
-  P0 = inrush spike (not labelled by the finder: highest point before P0_WINDOW_MS[1])
+  P0 = the peak just before P1 (not labelled by the finder): walking back from the rise
+       into A1, down to the dip, then up to the first local maximum. NaN where the walk
+       fails or A1 is unknown.
   P1..P4 = A1, B1, A2, B2  (finder's time_ms = sample maximum of the raw trace)
 
 Traces are averaged into BIN-sample bins (10 us at the stored 200 ns spacing) and
@@ -25,8 +27,30 @@ from src.trc import read_trc                                     # - | LeCroy re
 
 BIN = 50                                                         # - | stored samples per bin: 50 x 200 ns = 10 us
 N_BINS = 5120                                                    # - | 5000 bins of trace, padded for the U-Net
-P0_WINDOW_MS = (-5.0, 3.0)                                       # - | inrush spike lives before Vin settles
+RISE_FRAC = 0.4                                                  # - | below this x A1 height the rise into A1 has not begun
+TOL_A = 0.005                                                    # - | current wiggle tolerated while walking, amps
+MAX_P0_GAP_MS = 3.0                                              # - | a longer walk means the rule failed
 FINDER_LABELS = ("A1", "B1", "A2", "B2")                         # - | P1..P4 in time order
+
+
+def p0_before_a1(x, a1, dt_ms):                                  # - | P0 = peak just before P1
+    """Return the P0 bin, or NaN. Walk back from the rise into A1 down to the dip, then up to the peak."""
+    below = np.flatnonzero(x[:a1] < RISE_FRAC * x[a1])           # O(n) | bins before A1 under the rise level
+    if below.size == 0:                                          # - | no rise found
+        return np.nan                                            # - | unlabelled
+    start = int(below[-1])                                       # - | on the rise, just above the dip
+    j = start                                                    # - | walk pointer
+    while j > 0 and x[j - 1] <= x[j] + TOL_A:                    # O(n) | still falling going back
+        j -= 1                                                   # - | step back
+    dip = j + int(np.argmin(x[j:start + 1]))                     # O(n) | lowest point of the stretch
+    j = dip                                                      # - | restart from the dip
+    while j > 0 and x[j - 1] >= x[j] - TOL_A:                    # O(n) | still rising going back
+        j -= 1                                                   # - | step back
+    p0 = j + int(np.argmax(x[j:dip + 1]))                        # O(n) | highest point of the stretch
+    if p0 == dip or (a1 - p0) * dt_ms > MAX_P0_GAP_MS:           # - | no peak, or walked too far
+        return np.nan                                            # - | unlabelled
+    return float(p0)
+    # Total: time O(n), space O(n)
 
 
 def collect(yaml_root, have):                                    # - | every shot with a trace on disk
@@ -91,11 +115,9 @@ def main():                                                      # - | build the
         t, v, _ = read_trc(raw_dir / r["member"])                # O(n) | 250k samples
         t0, dt, b = to_bins(t, v)                                # O(n) | 5120 bins
         X[i, 0] = b; T0[i] = t0; DT[i] = dt                      # - | store
-        tm = t0 + dt * np.arange(N_BINS)                         # - | bin centres in ms
-        w = (tm >= P0_WINDOW_MS[0]) & (tm <= P0_WINDOW_MS[1])    # - | inrush window
-        P[i, 0] = np.flatnonzero(w)[np.argmax(b[w])]             # O(N_BINS) | P0 by rule
         if r["good"]:                                            # - | finder labels exist
             P[i, 1:] = (np.array(r["t_ms"]) - t0) / dt           # - | ms -> bin index (fractional)
+            P[i, 0] = p0_before_a1(b, int(round(P[i, 1])), dt)   # O(N_BINS) | P0 by rule, needs A1
         if i % 500 == 0:                                         # - | progress
             print(f"{i}/{N}", flush=True)
 
@@ -109,7 +131,7 @@ def main():                                                      # - | build the
                         finder_t_ms=np.array([(r["found_t_ms"] + [np.nan] * 4)[:4] for r in recs]),
                         finder_lab=np.array([",".join(r["found_lab"]) for r in recs]))  # O(N N_BINS) | write
     print(f"{out}  shots={N}  good={sum(r['good'] for r in recs)}  "
-          f"runs={len({r['run'] for r in recs})}")
+          f"runs={len({r['run'] for r in recs})}  P0 labelled={int(np.isfinite(P[:, 0]).sum())}")
     # Total: time O(N n), space O(N N_BINS)
 
 

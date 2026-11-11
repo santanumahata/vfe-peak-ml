@@ -2,8 +2,7 @@
 
   python -m writeup.make_figures
 
-Toy figures  -> writeup/plots/toy/   (tracked): the deck's plotting functions, recoloured for a white page.
-Real figures -> writeup/plots/real/  (git-ignored): drawn from data/real_shots.npz and outputs/real/.
+Figures -> writeup/plots/real/  (git-ignored): drawn from data/real_shots.npz and outputs/real/.
 Every real-data number in the text is a macro written here to writeup/plots/real/numbers.tex.
 """
 import json                                                      # - | metrics files
@@ -14,11 +13,9 @@ matplotlib.use("Agg")                                            # - | no displa
 import matplotlib.pyplot as plt                                  # - | figures
 import numpy as np                                               # - | arrays
 
-import talk.make_plots as mp                                     # - | deck's toy figure functions
 from src.report_real import C_F, C_M, C_T, PEAKS, draw_shot, load, ms, sweep_runs  # - | real-data helpers
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent            # - | repo root
-TOY = ROOT / "writeup" / "plots" / "toy"                         # - | tracked figures
 REAL = ROOT / "writeup" / "plots" / "real"                       # - | local, git-ignored
 REPORT_MODEL = "outputs/real/sweep/u32l4"                        # - | report model: U-Net 32/4 seed 0
 TRANSFORMER = "outputs/real/transformer"                         # - | comparison model
@@ -26,19 +23,6 @@ WHITE_PAGE = {"figure.facecolor": "white", "axes.facecolor": "white", "savefig.f
               "text.color": "black", "axes.labelcolor": "black", "axes.edgecolor": "#333333",
               "xtick.color": "#333333", "ytick.color": "#333333", "grid.color": "#BBBBBB",
               "font.size": 10, "axes.titlesize": 10, "legend.frameon": False, "figure.dpi": 150}
-
-
-def toy_figures():                                               # - | deck functions on a white page
-    """Swap the deck's navy palette for print colours, then call its figure functions."""
-    TOY.mkdir(parents=True, exist_ok=True)                       # - | output folder
-    mp.PLOTS = TOY                                               # - | redirect mp.save
-    mp.NAVY, mp.MID, mp.GREY, mp.WHITE = "white", "#DDDDDD", "#555555", "black"  # - | background / text
-    mp.CYAN, mp.GOLD = "#1F77B4", "#D9822B"                      # - | data / truth highlight
-    plt.rcParams.update(WHITE_PAGE)                              # - | override the deck rcParams
-    for f in (mp.fig_anatomy, mp.fig_heatmap, mp.fig_perpeak, mp.fig_methods,
-              mp.fig_gallery, mp.fig_p0, mp.fig_snap, mp.fig_precision):  # O(8) | each toy figure
-        f()                                                      # - | writes TOY/<name>.png
-    # Total: time O(toy figures), space O(one figure)
 
 
 def save(fig, name):                                             # - | one real figure
@@ -54,13 +38,13 @@ def fig_trace(d, m, i):                                          # - | one shot,
     y = d["X"][i, 0]                                             # - | binned current
     fig, ax = plt.subplots(2, 1, figsize=(9, 5.2), gridspec_kw={"height_ratios": [1, 1.3]})
     ax[0].plot(tm[:5000], y[:5000], color="#222222", lw=0.7)     # O(n) | real bins, padding dropped
-    p0 = int(d["P"][i, 0])                                       # - | inrush bin by rule
+    p0 = int(d["P"][i, 0])                                       # - | P0 bin by rule
     ax[0].plot(tm[p0], y[p0], "v", color=C_F, ms=7)              # - | mark P0
-    ax[0].annotate("P0 (inrush)", (tm[p0], y[p0]), xytext=(8, 0), textcoords="offset points",
+    ax[0].annotate("P0", (tm[p0], y[p0]), xytext=(8, 0), textcoords="offset points",
                    color=C_F, fontsize=8, va="center")           # - | label it
-    ax[0].axvspan(15, 27, color="#1F77B4", alpha=0.08)           # - | zoom region
+    ax[0].axvspan(13.5, 27, color="#1F77B4", alpha=0.08)           # - | zoom region
     ax[0].set_xlabel("time from trigger [ms]"); ax[0].set_ylabel("I [A]")
-    draw_shot(ax[1], d, m, i)                                    # - | finder x, ML o, 15-27 ms
+    draw_shot(ax[1], d, m, i)                                    # - | finder x, ML o, 13.5-27 ms
     ax[1].set_xlabel("time from trigger [ms]")
     fig.tight_layout(); save(fig, "trace.png")
     # Total: time O(n), space O(n)
@@ -218,10 +202,12 @@ def numbers(d, m, mu, mt, sf, sm, bad):                          # - | \newcomma
     ru, rt = np.abs(residuals(d, m, "unet")), np.abs(residuals(d, m, "transformer"))  # - | |ML - finder|
     tr_runs = len(set(d["run"])) - len(set(d["run"][v])) - len(set(d["run"][bad]))  # - | training runs
     cu, cb = m["unet"]["conf"][v, 1], m["unet"]["conf"][bad, 1]  # - | A1 confidences
+    labelled = d["good"] & np.isfinite(d["P"][:, 0])               # - | all five labels known
     n = {"NShots": len(d["X"]), "NRuns": len(set(d["run"])), "NGood": int(d["good"].sum()),
          "NFail": len(bad), "NFailRuns": len(set(d["run"][bad])), "NTrain": mu["n_train"],
          "NTrainRuns": tr_runs, "NVal": mu["n_val"], "NValRuns": len(set(d["run"][v])),
-         "NHard": mu["n_hard"], "NHardClean": mu["n_hard"] - len(bad),
+         "NHard": mu["n_hard"], "NHardClean": int(np.sum(labelled[m["unet"]["hard"]])),
+         "NNoPzero": int(np.sum(d["good"] & ~labelled)),
          "Vins": ", ".join(sorted(set(d["vin"]), key=lambda s: int(s[:-1]))),
          "FailLabels": ", ".join(sorted(set(d["finder_lab"][bad]))).replace(",", ", "),
          "ParamsUnet": f"{mu['params'] / 1e6:.2f}", "ParamsTrans": f"{mt['params'] / 1e6:.2f}",
@@ -251,7 +237,7 @@ def real_figures():                                              # - | everythin
     mt = json.load(open(f"{TRANSFORMER}/metrics.json"))          # - | transformer metrics
     sweep = sweep_runs()                                         # - | {tag: [metrics per seed]}
     v, bad = m["unet"]["val"], np.flatnonzero(d["n_found"] == 3)  # - | held-out, finder failures
-    assert np.all(d["good"][v]), "held-out shot without finder labels"  # - | residuals need all four
+    assert np.all(d["good"][v] & np.isfinite(d["P"][v, 0])), "held-out shot without all five labels"
     assert len(bad) > 0 and np.all(np.isin(bad, m["unet"]["hard"])), "failure shot not in hard set"
     rng = np.random.default_rng(3)                               # - | same draw as report_real
     clean = rng.choice(v, 4, replace=False)                      # - | four example shots
@@ -271,5 +257,4 @@ def real_figures():                                              # - | everythin
 
 
 if __name__ == "__main__":                                       # - | script entry
-    toy_figures()                                                # - | tracked
     real_figures()                                               # - | local only
