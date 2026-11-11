@@ -1,6 +1,6 @@
 """ML peak finder vs the existing (manual, hard-coded) finder on real LVR current traces.
 
-  python -m src.report_real <out.pdf>
+  python -m src.report_real <out.pdf> [unet_dir]      default unet_dir: outputs/real/unet
 
 Reads data/real_shots.npz, outputs/real/{unet,transformer}/ and
 outputs/real/sweep*/<tag>[_s<seed>]/metrics.json (model-size page). Every number on the
@@ -25,16 +25,16 @@ UNSIGNED = ("Unsigned algorithm steps (not yet signed off): dataset build and th
 A4 = (11.69, 8.27)
 
 
-def load():
+def load(unet_dir="outputs/real/unet"):
     d = dict(np.load("data/real_shots.npz"))
     m = {}
-    for a in ("unet", "transformer"):
-        z = np.load(f"outputs/real/{a}/predictions.npz")
+    for a, src in (("unet", unet_dir), ("transformer", "outputs/real/transformer")):
+        z = np.load(f"{src}/predictions.npz")
         pos = np.full((len(d["X"]), 5), np.nan); conf = np.full((len(d["X"]), 5), np.nan)
         pos[z["val_idx"]] = z["val_pos"]; pos[z["hard_idx"]] = z["hard_pos"]
         conf[z["val_idx"]] = z["val_conf"]; conf[z["hard_idx"]] = z["hard_conf"]
         m[a] = {"pos": pos, "conf": conf, "val": z["val_idx"], "hard": z["hard_idx"],
-                "metrics": json.load(open(f"outputs/real/{a}/metrics.json"))}
+                "metrics": json.load(open(f"{src}/metrics.json"))}
     return d, m
 
 
@@ -70,7 +70,10 @@ def page_summary(pdf, d, m):
         f"What the existing finder reports. For each peak, the time and height of the highest "
         f"raw sample inside the peak (checked against the stored traces: the reported "
         f"amplitude equals the trace at the reported time).\n\n"
-        f"What I trained. A 1D U-Net that outputs one heat-map per landmark, trained on the "
+        f"What I trained. A 1D U-Net (base width {m['unet']['metrics'].get('base', 16)}, "
+        f"{m['unet']['metrics'].get('levels', 3)} levels, "
+        f"{m['unet']['metrics']['params']/1e6:.1f}M parameters, seed "
+        f"{m['unet']['metrics'].get('seed', 0)}) that outputs one heat-map per landmark, trained on the "
         f"finder's times from {m['unet']['metrics']['n_train']} shots in "
         f"{len(set(d['run'])) - n_runs_val - len(set(d['run'][bad]))} runs. Five landmarks: "
         f"P0 the inrush spike (by a simple rule, the finder does not report it), and "
@@ -290,7 +293,7 @@ def page_sweep(pdf, runs):
 
 def main():
     out = sys.argv[1]
-    d, m = load()
+    d, m = load(*sys.argv[2:3])
     v = m["unet"]["val"]; bad = np.flatnonzero(d["n_found"] == 3)
     rng = np.random.default_rng(3)
     clean = rng.choice(v, 4, replace=False)
