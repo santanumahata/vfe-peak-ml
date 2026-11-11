@@ -186,10 +186,12 @@ the failure shots with each model's marks.
 ### 18. ML vs finder PDF
 **Known-good command:**
 ```bash
-micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf
+micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4
 ```
-**Expect:** a 6-page PDF (summary, agreement, clean shots, failure shots, repeatability,
-confidence) and the summary rows printed. Every page names the unsigned algorithm steps.
+The second argument is the U-Net folder for pages 1–6 (default `outputs/real/unet`).
+**Expect:** a 7-page PDF (summary, agreement, clean shots, failure shots, repeatability,
+confidence, model size) and the summary and sweep rows printed. Every page names the
+unsigned algorithm steps; page 1 names the U-Net's width, depth, size and seed.
 
 ## Conventions
 
@@ -217,6 +219,9 @@ confidence) and the summary rows printed. Every page names the unsigned algorith
 - **Sweep folder naming:** seed-0 runs go to `outputs/real/sweep/<tag>/`, extra seeds to
   `outputs/real/sweep_seed/<tag>_s<seed>/`. `src/report_real.py` groups runs by the tag
   before `_s`, so the tag itself must not contain `_s`.
+- **Report model = U-Net base 32, 4 levels, seed 0** (`outputs/real/sweep/u32l4`), chosen
+  on three seeds: it varied least across seeds of the two configs re-trained. Seed 0 is used
+  because it was trained before the seed comparison, not picked from it.
 - **`.trc` format facts** (LeCroy WAVEDESC): block lengths are seven int32 at offsets 36–60,
   `WAVE_ARRAY_1` is the one at 60; `SPARSING_FACTOR` (int32 at 136) multiplies
   `HORIZ_INTERVAL`, because the header keeps the full-rate interval for sparse records.
@@ -284,3 +289,5 @@ confidence) and the summary rows printed. Every page names the unsigned algorith
   facts (WAVE_ARRAY_1 offset, SPARSING_FACTOR) into Conventions.
 - 2026-11-11 — Step 16 now carries the sweep training loop and the extra-seed re-runs;
   sweep folder naming added to Conventions.
+- 2026-11-11 — Step 18: PDF gains a model-size page (7 pages) and takes the U-Net folder as
+  a second argument; report model switched from base 16 to base 32 / 4 levels.

@@ -93,5 +93,5 @@ micromamba run -n $ENV python -m diagnostics.real_hard_cases outputs/real/unet o
 
 ### 18. ML vs finder PDF
 ```bash
-micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf
+micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4
 ```
