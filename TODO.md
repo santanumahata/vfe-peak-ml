@@ -6,13 +6,13 @@
 - Nothing in flight.
 
 ## Next
-1. Decide whether the P0 rule's choice is right on the two held-out 12 V shots where the network puts P0 on the earlier ripple (rule: small bump at the start of the rise; network confidence low) — `diagnostics/2026-11-11_real_p0_misses.png` (local).
-2. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+1. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
 
 ## Done
+- 2026-11-11 — Decided: on the two held-out 12 V shots where network and rule disagree on P0, the rule is right (small bump at the start of the rise into A1); the network's P0 there is a miss, flagged by its low confidence — `diagnostics/2026-11-11_real_p0_misses.png` (local).
 - 2026-11-11 — Both PDFs rebuilt on the new P0: ML-vs-finder (7 pages) and write-up (11 pages, real data only); report model stays U-Net 32/4 seed 0 — `outputs/real/2026-11-11_ml_vs_finder.pdf`, `writeup/outputs/vfe_peak_ml_writeup.pdf` (local).
 - 2026-11-11 — All 11 models retrained on the new P0 labels (report model, transformer, 7-config sweep, seeds 1–2 for 16/3 and 32/4); old models kept in `outputs/real/old_p0inrush/`, old dataset in `data/real_shots_p0inrush.npz` (local).
 - 2026-11-11 — P0 redefined as the peak just before A1 (walking rule, `src/real_data.py`), checked on 16 plotted shots across all voltages and the failing cases — `diagnostics/real_p0_rule.py`, commit 6ef0dc9.
