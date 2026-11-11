@@ -166,10 +166,14 @@ failure runs), `model.pt`, `predictions.npz` into the `--out` folder.
 ### 16. Compare model sizes
 **Known-good command:**
 ```bash
+for cfg in "u16 16 3" "u32 32 3" "u64 64 3" "u32l4 32 4" "u32l5 32 5"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch unet --base $2 --levels $3 --out outputs/real/sweep/$1; done && for cfg in "t256x4 4" "t256x8 8"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch transformer --d 256 --tdepth $2 --out outputs/real/sweep/$1; done
+for s in 1 2; do for cfg in "<tag> <base> <levels>"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch unet --base $2 --levels $3 --seed $s --out outputs/real/sweep_seed/$1_s$s; done; done
 micromamba run -n $ENV python -m diagnostics.real_sweep_summary
 ```
-**Expect:** one row per folder under `outputs/real/sweep*/`: parameters, training time,
-seed, and argmax / sub-bin agreement with the finder.
+**Expect:** the seven seed-0 runs take about 55 min in total on the RTX 4070 (2 min for
+base 16 up to 12 min for base 64); the second line re-trains the top configs with new
+seeds. The summary prints one row per folder under `outputs/real/sweep*/`: parameters,
+training time, seed, and argmax / sub-bin agreement with the labels.
 
 ### 17. Failure shots
 **Known-good command:**
@@ -210,6 +214,9 @@ confidence) and the summary rows printed. Every page names the unsigned algorith
   network learns shape, not position.
 - **Compare models across seeds.** The same seed on the GPU does not reproduce bit for bit
   — identical configs give measurably different scores, so a single-run difference may be noise.
+- **Sweep folder naming:** seed-0 runs go to `outputs/real/sweep/<tag>/`, extra seeds to
+  `outputs/real/sweep_seed/<tag>_s<seed>/`. `src/report_real.py` groups runs by the tag
+  before `_s`, so the tag itself must not contain `_s`.
 - **`.trc` format facts** (LeCroy WAVEDESC): block lengths are seven int32 at offsets 36–60,
   `WAVE_ARRAY_1` is the one at 60; `SPARSING_FACTOR` (int32 at 136) multiplies
   `HORIZ_INTERVAL`, because the header keeps the full-rate interval for sparse records.
@@ -275,3 +282,5 @@ confidence) and the summary rows printed. Every page names the unsigned algorith
   `high - low < 0`, matplotlib `boxplot(labels=)`, `exp` overflow in `spiky_pulse`, hybrid
   scan-recall ceiling under centre labels, labels on the rising edge. Moved `.trc` header
   facts (WAVE_ARRAY_1 offset, SPARSING_FACTOR) into Conventions.
+- 2026-11-11 — Step 16 now carries the sweep training loop and the extra-seed re-runs;
+  sweep folder naming added to Conventions.
