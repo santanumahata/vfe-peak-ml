@@ -8,16 +8,11 @@ Every command runs from the repository root (`python -m src...` imports the repo
 ## Overview
 
 Replaces the hard-coded peak finder of the LVR board tester. Each 4-peak test shot is an
-input-current trace (scope channel C4) with five landmarks: P0 the inrush spike, then
-P1–P4 = A1, B1, A2, B2, each sitting on a floor that never returns to its starting level,
-with ripple and small structure in between that must not be reported. Two tracks:
-
-- **Toy track** (steps 2–11): a generator written from a verbal description, a 1D U-Net
-  heat-map model trained on it, a hybrid scan-and-rank variant, apex/precision studies,
-  a results PDF and a lab deck.
-- **Real track** (steps 12–18): the tester's archive of `.trc` traces and result YAMLs. The
-  finder's own output on each shot is the training label; models are trained and scored
-  split by run, and compared with the finder in a PDF.
+input-current trace (scope channel C4) with five landmarks: P0 the peak just before A1,
+then P1–P4 = A1, B1, A2, B2. Steps 2–9 work on the tester's archive of `.trc` traces and
+result YAMLs: the finder's own output on each shot is the training label for P1–P4, P0
+comes from a rule; a 1D heat-map network is trained and scored split by run, compared with
+the finder in a PDF, and written up in a LaTeX note.
 
 Real data and everything derived from it stays local and git-ignored; the public repo
 carries code only.
@@ -36,97 +31,7 @@ micromamba run -n $ENV python -c "import torch,yaml;print(torch.cuda.is_availabl
 ```
 numpy, matplotlib, scipy and scikit-learn are already in the env.
 
-### 2. Generator self-check (toys)
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.toy_waveforms
-```
-**Expect:** one line `ok  peaks: [...] apex: [...]`, five strictly increasing positions and
-apex heights rising from P0 to P4. Labels are the visible apex of the noiseless waveform;
-draws with an invisible landmark, or a P0–P1 apex gap outside 10–60 samples, are redrawn
-(about 42 % of raw draws).
-
-### 3. Train the toy CNN
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.train
-```
-Sweep overrides: `--sigma S --epochs E --n-train N --out DIR`.
-**Expect:** `data (8000, 1, 1024) (1000, 1, 1024) ... on cuda`, 25 epoch lines, about
-2 min on the 4070. Writes `outputs/metrics.json`, `outputs/peak_unet.pt`,
-`outputs/val_eval.npz`. Current toy result: all five within 2 samples 0.768, within 4
-samples 0.890, gross miss (>15 samples) 0.020.
-
-### 4. Hybrid stage 2 (toys, not the default)
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.hybrid
-```
-**Expect:** a stage-2 candidate table, then a `cnn_only` and a `hybrid` line; writes
-`outputs/metrics_hybrid.json`, `outputs/hybrid_eval.npz`. The hybrid scores below
-CNN-only (0.722 vs 0.768 all-five-within-2).
-
-### 5. Decoder ablation (toys)
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m diagnostics.hybrid_ablation
-```
-**Expect:** four rows (cnn_only, dp_monotone, dp_plain, greedy), the count of traces where
-the CNN answer is in the candidate set (1000/1000) and where the CNN chain breaks monotone
-apex (1/1000). Writes `outputs/ablation.json`.
-
-### 6. Apex snap tuning (toys)
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m diagnostics.refine_sweep && micromamba run -n $ENV python -m diagnostics.refine_gated
-```
-**Expect:** `outputs/refine_sweep.json`, `outputs/refine_gated.json`; the baseline line must
-match `outputs/metrics.json`, or the model file is stale. `src/refine.py::predict` is the
-toy inference entry point (position, confidence, apex sample, apex height in board units,
-snap flag); defaults window 3, gain 0.05, smooth 1, snap only below confidence 0.50.
-
-### 7. Apex precision checks (toys)
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m diagnostics.apex_ambiguity && micromamba run -n $ENV python -m diagnostics.decode_compare outputs
-```
-**Expect:** oracle readers (told where each peak is) at 0.569 raw / 0.639 smoothed
-all-five-within-2, 74 % of traces with an apex flat to one noise sigma 3+ samples away;
-writes `outputs/apex_ambiguity.json`. Sub-sample decoding matches argmax within 0.3 %.
-
-### 8. Toy results PDF
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.report
-```
-**Expect:** `wrote outputs/vfe_peak_ml_report.pdf`. The stage-2 page is skipped with a
-printed notice if step 4 or 5 has not been run.
-
-### 9. Slide figures
-**Known-good command:**
-```bash
-micromamba run -n $ENV python talk/make_plots.py
-```
-**Expect:** one absolute path per figure in `talk/plots/` (anatomy, heatmap_demo, perpeak,
-methods, gallery, p0_errors, snap, precision).
-
-### 10. Lab deck
-**Known-good command:**
-```bash
-cd talk/src && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml.tex && pdflatex -interaction=nonstopmode -output-directory=../outputs vfe_peak_ml.tex
-```
-**Expect:** `talk/outputs/vfe_peak_ml.pdf`, 17 pages;
-`grep -c Overfull ../outputs/vfe_peak_ml.log` is 0.
-
-### 11. Rebuild order after a generator change
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.train && micromamba run -n $ENV python -m src.hybrid && micromamba run -n $ENV python -m diagnostics.hybrid_ablation && micromamba run -n $ENV python -m diagnostics.refine_sweep && micromamba run -n $ENV python -m diagnostics.refine_gated && micromamba run -n $ENV python -m diagnostics.apex_ambiguity && micromamba run -n $ENV python talk/make_plots.py
-```
-**Expect:** every stored toy number and figure regenerated from the new generator; then
-steps 8 and 10.
-
-### 12. List and unpack the archive's metadata (real)
+### 2. List and unpack the archive's metadata
 **Known-good command:**
 ```bash
 tar -tf ~/Downloads/results.tar > <members.txt> && mkdir <yaml_dir> && tar -xf ~/Downloads/results.tar -C <yaml_dir> --no-same-owner --no-same-permissions --wildcards '*.yaml'
@@ -134,7 +39,7 @@ tar -tf ~/Downloads/results.tar > <members.txt> && mkdir <yaml_dir> && tar -xf ~
 **Expect:** one line per archive member in `<members.txt>`; the per-run result YAMLs under
 `<yaml_dir>/results/<run>/`. `<yaml_dir>` is a new, empty folder outside the repo.
 
-### 13. First look at real traces
+### 3. First look at real traces
 **Known-good command:**
 ```bash
 micromamba run -n $ENV python -m diagnostics.real_first_look <yaml_dir> ~/Downloads/results.tar <extract_dir> diagnostics/<date>_real_first_look.png <members.txt>
@@ -142,17 +47,18 @@ micromamba run -n $ENV python -m diagnostics.real_first_look <yaml_dir> ~/Downlo
 **Expect:** a PNG of shots where the finder found all four peaks and shots where it found
 three, the finder's marks overlaid (apex markers, start–end shaded).
 
-### 14. Build the real dataset
+### 4. Build the real dataset
 **Known-good command:**
 ```bash
 micromamba run -n $ENV python -m src.real_data <yaml_dir> ~/Downloads/results.tar <members.txt> data
 ```
-**Expect:** progress lines, then `data/real_shots.npz  shots=… good=… runs=…`. Traces are
+**Expect:** progress lines, then `data/real_shots.npz  shots=… good=… runs=… P0 labelled=…`
+(P0 labelled a few shots below good). Traces are
 extracted once into `data/raw/` (skipped on rerun). The npz holds X (N, 1, 5120) in amps,
 P (N, 5) landmark bins, a 0.01 ms bin width, and the finder's raw output for every shot
 (`finder_t_ms`, `finder_lab`), failures included.
 
-### 15. Train on real traces
+### 5. Train on real traces
 **Known-good command:**
 ```bash
 micromamba run -n $ENV python -m src.train_real --arch unet --out outputs/real/unet
@@ -163,7 +69,7 @@ Options: `--arch unet|transformer`, `--base B --levels L` (U-Net width/depth),
 `metrics.json` (argmax and sub-bin `val_subbin` scores, plus the clean shots of the
 failure runs), `model.pt`, `predictions.npz` into the `--out` folder.
 
-### 16. Compare model sizes
+### 6. Compare model sizes
 **Known-good command:**
 ```bash
 for cfg in "u16 16 3" "u32 32 3" "u64 64 3" "u32l4 32 4" "u32l5 32 5"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch unet --base $2 --levels $3 --out outputs/real/sweep/$1; done && for cfg in "t256x4 4" "t256x8 8"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch transformer --d 256 --tdepth $2 --out outputs/real/sweep/$1; done
@@ -175,7 +81,7 @@ base 16 up to 12 min for base 64); the second line re-trains the top configs wit
 seeds. The summary prints one row per folder under `outputs/real/sweep*/`: parameters,
 training time, seed, and argmax / sub-bin agreement with the labels.
 
-### 17. Failure shots
+### 7. Failure shots
 **Known-good command:**
 ```bash
 micromamba run -n $ENV python -m diagnostics.real_hard_cases outputs/real/unet outputs/real/transformer diagnostics/<date>_real_hard_cases.png
@@ -183,7 +89,7 @@ micromamba run -n $ENV python -m diagnostics.real_hard_cases outputs/real/unet o
 **Expect:** per failure run, the models' A1 time and its shot-to-shot spread, and a PNG of
 the failure shots with each model's marks.
 
-### 18. ML vs finder PDF
+### 8. ML vs finder PDF
 **Known-good command:**
 ```bash
 micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4
@@ -193,14 +99,14 @@ The second argument is the U-Net folder for pages 1–6 (default `outputs/real/u
 confidence, model size) and the summary and sweep rows printed. Every page names the
 unsigned algorithm steps; page 1 names the U-Net's width, depth, size and seed.
 
-### 19. Full write-up (LaTeX note)
+### 9. Full write-up (LaTeX note)
 **Known-good command:**
 ```bash
 micromamba run -n $ENV python -m writeup.make_figures && cd writeup/src && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex
 ```
-Needs steps 3–6 (toy outputs), 15 (`outputs/real/transformer`) and 16 (`outputs/real/sweep/u32l4`
-and the seed re-runs).
-**Expect:** 8 toy PNG paths (`writeup/plots/toy/`), then 8 real PNG paths and
+Needs steps 5 (`outputs/real/transformer`) and 6 (`outputs/real/sweep/u32l4` and the seed
+re-runs).
+**Expect:** 8 PNG paths and
 `perpeak_table.tex`, `sweep_table.tex`, `numbers.tex` (`writeup/plots/real/`), no assertion
 error; `writeup/outputs/vfe_peak_ml_writeup.pdf`, 16 pages; `grep -E "LaTeX Warning|Overfull"`
 on the log shows only one 2.6 pt overfull line in the abstract. Every page footer names the
@@ -213,15 +119,19 @@ unsigned steps.
 - **Output:** five per-sample heat-map channels, position = argmax, confidence = max sigmoid.
   Chosen over regressing five numbers so QC gets a per-peak confidence.
 - **Input scaling:** per-trace median subtraction, then division by max |value|. Every
-  inference path reuses `src.train.normalise`.
-- **Toy labels = visible apex** of the noiseless waveform (`label_at_apex`). Each toy peak is
-  a pulse plus a floor step centred on the same point, so the summed curve tops out after
-  the pulse centre; the old centre labels sat on the rising edge.
+  inference path reuses `src.model.normalise`.
 - **Real labels = the finder's output.** The finder's `time_ms` is the highest raw sample
   inside the peak and `amplitude_A` the current there (checked against the traces);
-  `start_ms` is its onset. P0 (inrush) is not reported by the finder: it is the highest bin
-  between −5 and +3 ms.
-- **Real landmark map:** P0 = inrush, P1 = A1, P2 = B1, P3 = A2, P4 = B2 (4-peak test).
+  `start_ms` is its onset.
+- **P0 = the peak just before A1** (not reported by the finder), by rule in
+  `src.real_data.p0_before_a1`: from the last bin before A1 below 0.4 × A1's height, walk back
+  while the current falls (to the dip), then while it rises; the first local maximum is P0.
+  Steps of up to 5 mA against the direction are tolerated. No peak, or a walk more than 3 ms
+  before A1 → P0 is NaN and the shot is neither trained on nor scored. The rule needs A1, so
+  finder-failure shots have no P0 label. Checked with `diagnostics/real_p0_rule.py`.
+- **Real landmark map:** P0 = peak before A1, P1 = A1, P2 = B1, P3 = A2, P4 = B2 (4-peak test).
+- **No simulated data.** Toy generator, toy models, deck and toy figures were removed
+  (commit 6ef0dc9); only real traces are used.
 - **Real binning:** traces stored at 200 ns are averaged in blocks of 50 into 10 µs bins and
   padded to 5120.
 - **Split by run, never by shot** — shots inside a run are near-copies. Runs containing a
@@ -249,8 +159,7 @@ unsigned steps.
   `writeup/plots/real/numbers.tex`, and the real tables are generated `.tex` rows read with
   `\csname @@input\endcsname` (plain `\input` inside a tabular breaks `\bottomrule`). The
   `.tex` source therefore holds no real results; `writeup/plots/real/` and `writeup/outputs/`
-  are git-ignored. Toy figures reuse `talk/make_plots.py` recoloured for a white page.
-- **Default toy path is CNN-only.** `src/hybrid.py` stays as a switch, not the production path.
+  are git-ignored.
 - **Algorithm steps are unsigned.** No `docs/algorithm_*.md` exists yet; any deliverable
   names the unsigned steps (dataset build and P0 rule, run split, training, peak readout).
 
@@ -266,18 +175,14 @@ unsigned steps.
   **Cause:** GPU state left by a previous process in the same session.
   **Fix:** harmless for inference, but check the `device` field in the written metrics before
   quoting a timing as a GPU timing.
-- **Symptom:** a generator change leaves `outputs/ablation.json`, `metrics_hybrid.json`,
-  `refine_*.json`, `apex_ambiguity.json` and the slide figures silently stale.
-  **Cause:** they are all keyed to the trained toy model and the generator config.
-  **Fix:** run step 11, then steps 8 and 10.
-- **Symptom:** snapping every peak onto the nearest maximum of the noisy trace drops toy
-  all-five-within-2 from 0.768 to 0.570.
-  **Cause:** labels are the clean apex; the noisy-trace maximum is a worse estimate of it
-  than the heat-map argmax.
-  **Fix:** keep the gain and confidence guards in `src/refine.py`.
-- **Symptom:** median |Δt| reads exactly 0.00 for toy P1–P4.
-  **Cause:** apex labels and argmax predictions are both whole samples.
-  **Fix:** report within-k fractions, not the median.
+- **Symptom:** a P0 rule with fixed windows (dip = lowest bin in A1 − 1.5 ms, P0 = highest
+  bin in dip − 0.4 ms) puts P0 on the down-slope on hundreds of shots, mostly at 9 V.
+  **Cause:** the P0 → A1 gap varies with input voltage (median 1.5–1.9 ms).
+  **Fix:** the walking rule in `p0_before_a1`; no fixed windows.
+- **Symptom:** a training run is cut off (machine switched off) and leaves an empty `--out`
+  folder.
+  **Cause:** files are written only after the last epoch.
+  **Fix:** rerun that config; finished folders are complete and need no rerun.
 - **Symptom:** `Command 'python' not found`, or `No module named diagnostics` / `src`.
   **Cause:** the shell has no bare `python`, or the command ran outside the repository root.
   **Fix:** `cd` to the repo root and use `micromamba run -n $ENV python -m ...`.
@@ -313,3 +218,7 @@ unsigned steps.
 - 2026-11-11 — Step 19 added: full LaTeX write-up (`writeup/make_figures.py`,
   `writeup/src/vfe_peak_ml_writeup.tex`), real numbers as generated macros. Step 9's
   hybrid panel y-range fixed (60–85 %; the old 80–92 % left the bars off-axis).
+- 2026-11-11 — Simulated data removed: toy steps 2–11, toy conventions and three toy gotchas
+  dropped, steps renumbered 1–9. P0 redefined from the inrush spike to the peak just before
+  A1 (walking rule); `normalise` moved to `src/model.py`; all models retrained on the new
+  labels.
