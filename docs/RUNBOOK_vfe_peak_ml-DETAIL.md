@@ -193,6 +193,19 @@ The second argument is the U-Net folder for pages 1–6 (default `outputs/real/u
 confidence, model size) and the summary and sweep rows printed. Every page names the
 unsigned algorithm steps; page 1 names the U-Net's width, depth, size and seed.
 
+### 19. Full write-up (LaTeX note)
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -m writeup.make_figures && cd writeup/src && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex
+```
+Needs steps 3–6 (toy outputs), 15 (`outputs/real/transformer`) and 16 (`outputs/real/sweep/u32l4`
+and the seed re-runs).
+**Expect:** 8 toy PNG paths (`writeup/plots/toy/`), then 8 real PNG paths and
+`perpeak_table.tex`, `sweep_table.tex`, `numbers.tex` (`writeup/plots/real/`), no assertion
+error; `writeup/outputs/vfe_peak_ml_writeup.pdf`, 16 pages; `grep -E "LaTeX Warning|Overfull"`
+on the log shows only one 2.6 pt overfull line in the abstract. Every page footer names the
+unsigned steps.
+
 ## Conventions
 
 - **Exactly five landmarks.** The model always returns five positions; a doubtful peak is
@@ -231,6 +244,12 @@ unsigned algorithm steps; page 1 names the U-Net's width, depth, size and seed.
   from it.
 - **Real data stays local.** `data/`, `outputs/real/` and `diagnostics/*_real_*` are
   git-ignored; the public repo gets code only, and docs carry no real results or run IDs.
+- **Write-up numbers are macros.** Every real-data number in
+  `writeup/src/vfe_peak_ml_writeup.tex` is a `\newcommand` generated into
+  `writeup/plots/real/numbers.tex`, and the real tables are generated `.tex` rows read with
+  `\csname @@input\endcsname` (plain `\input` inside a tabular breaks `\bottomrule`). The
+  `.tex` source therefore holds no real results; `writeup/plots/real/` and `writeup/outputs/`
+  are git-ignored. Toy figures reuse `talk/make_plots.py` recoloured for a white page.
 - **Default toy path is CNN-only.** `src/hybrid.py` stays as a switch, not the production path.
 - **Algorithm steps are unsigned.** No `docs/algorithm_*.md` exists yet; any deliverable
   names the unsigned steps (dataset build and P0 rule, run split, training, peak readout).
@@ -291,3 +310,6 @@ unsigned algorithm steps; page 1 names the U-Net's width, depth, size and seed.
   sweep folder naming added to Conventions.
 - 2026-11-11 — Step 18: PDF gains a model-size page (7 pages) and takes the U-Net folder as
   a second argument; report model switched from base 16 to base 32 / 4 levels.
+- 2026-11-11 — Step 19 added: full LaTeX write-up (`writeup/make_figures.py`,
+  `writeup/src/vfe_peak_ml_writeup.tex`), real numbers as generated macros. Step 9's
+  hybrid panel y-range fixed (60–85 %; the old 80–92 % left the bars off-axis).

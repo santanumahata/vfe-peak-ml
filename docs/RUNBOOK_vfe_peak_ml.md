@@ -95,3 +95,8 @@ micromamba run -n $ENV python -m diagnostics.real_hard_cases outputs/real/unet o
 ```bash
 micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4
 ```
+
+### 19. Full write-up (LaTeX note)
+```bash
+micromamba run -n $ENV python -m writeup.make_figures && cd writeup/src && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex
+```
