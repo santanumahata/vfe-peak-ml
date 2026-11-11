@@ -3,18 +3,18 @@
 **Last updated:** 2026-11-11
 
 ## Now
-- Seeds 1 and 2 for U-Net base 16 / 3 levels and base 32 / 4 levels (`outputs/real/sweep_seed/<tag>_s<seed>/`) — training in the background, 4 runs.
-- Model-size page (page 7) added to `src/report_real.py` — rendered alone on the seed-0 runs and checked; the full 7-page PDF not yet built.
+- Nothing in flight.
 
 ## Next
-1. When the seed re-runs finish, rebuild the ML-vs-finder PDF with the model-size page (runbook step 18) and check all 7 pages.
-2. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+1. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF.
 - Keep or delete `outputs/toy_gallery.png` (drawn by the pre-widening generator, superseded) — **waiting on:** decision.
 
 ## Done
+- 2026-11-11 — ML-vs-finder PDF rebuilt, 7 pages: pages 1–6 from U-Net 32/4 seed 0 (all four within 0.02 ms 91.1 → 92.4 %, within 0.1 ms 100.0 %, A1 placed on all 26 failure shots), page 7 = model-size table over all configs with seed spread — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local), `src/report_real.py`, commits 8314d07, d837354.
+- 2026-11-11 — Seeds 1 and 2 for U-Net 16/3 and 32/4: 16/3 spreads 87.0–93.2 % (all five within 0.02 ms, sub-bin), 32/4 spreads 92.4–93.0 % — `outputs/real/sweep_seed/` (local).
 - 2026-11-11 — Runbook step 16 carries the sweep loop and seed re-runs; sweep folder naming in Conventions — commit 509116e.
 - 2026-11-11 — Model-size sweep, 7 configs at seed 0: no larger model beats the base-16 U-Net (0.46M; 93.2 % of shots with all five within 0.02 ms on sub-bin readout); U-Nets within 1 % of each other, transformers 2–3 % lower — `diagnostics.real_sweep_summary`, `outputs/real/sweep/` (local).
 - 2026-11-11 — Pushed the five code files behind runbook steps 15, 16 and 18 (`src/model.py`, `src/real_data.py`, `src/train_real.py`, `src/report_real.py`, `diagnostics/real_sweep_summary.py`), no data; `.claude-backups/` added to `.gitignore` — commit 7bafced.
