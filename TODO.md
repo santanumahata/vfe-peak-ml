@@ -3,19 +3,20 @@
 **Last updated:** 2026-11-11
 
 ## Now
-- Real-trace model-size sweep (7 configs, seed 0, `outputs/real/sweep/`) — six finished (U-Net base 16/32/64 at 3 levels, base 32 at 4 and 5 levels, transformer 256×4), all at 98.9–99.2 % within 0.05 ms with no gross errors; transformer 256×8 training.
+- Seeds 1 and 2 for U-Net base 16 / 3 levels and base 32 / 4 levels (`outputs/real/sweep_seed/<tag>_s<seed>/`) — training in the background, 4 runs.
+- Model-size page (page 7) added to `src/report_real.py` — rendered alone on the seed-0 runs and checked; the full 7-page PDF not yet built.
 
 ## Next
-1. When the sweep finishes, tabulate it: `micromamba run -n $ENV python -m diagnostics.real_sweep_summary` (runbook step 16), argmax and sub-bin readout side by side.
-2. Re-train the top two configs with new seeds (`--seed 1`, `--seed 2`) before naming a winner; same-seed GPU runs do not reproduce exactly.
-3. If the winner differs from the base-16 U-Net, regenerate the ML-vs-finder PDF from it (runbook step 18).
-4. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+1. When the seed re-runs finish, rebuild the ML-vs-finder PDF with the model-size page (runbook step 18) and check all 7 pages.
+2. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF.
 - Keep or delete `outputs/toy_gallery.png` (drawn by the pre-widening generator, superseded) — **waiting on:** decision.
 
 ## Done
+- 2026-11-11 — Runbook step 16 carries the sweep loop and seed re-runs; sweep folder naming in Conventions — commit 509116e.
+- 2026-11-11 — Model-size sweep, 7 configs at seed 0: no larger model beats the base-16 U-Net (0.46M; 93.2 % of shots with all five within 0.02 ms on sub-bin readout); U-Nets within 1 % of each other, transformers 2–3 % lower — `diagnostics.real_sweep_summary`, `outputs/real/sweep/` (local).
 - 2026-11-11 — Pushed the five code files behind runbook steps 15, 16 and 18 (`src/model.py`, `src/real_data.py`, `src/train_real.py`, `src/report_real.py`, `diagnostics/real_sweep_summary.py`), no data; `.claude-backups/` added to `.gitignore` — commit 7bafced.
 - 2026-11-11 — Runbook split into card + detail, real-trace steps 12–18 added, superseded gotchas pruned — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 85eabef.
 - 2026-11-11 — ML-vs-existing-finder comparison PDF, 6 pages, unsigned steps named on every page — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local, git-ignored), `src/report_real.py`.
