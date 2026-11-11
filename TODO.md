@@ -3,7 +3,7 @@
 **Last updated:** 2026-11-11
 
 ## Now
-- Real-trace model-size sweep (7 configs, seed 0, `outputs/real/sweep/`) — U-Net base 16, 32 and 64 (3 levels) finished; base 32 / 4 levels training; base 32 / 5 levels and transformer 256×4, 256×8 not started yet.
+- Real-trace model-size sweep (7 configs, seed 0, `outputs/real/sweep/`) — six finished (U-Net base 16/32/64 at 3 levels, base 32 at 4 and 5 levels, transformer 256×4), all at 98.9–99.2 % within 0.05 ms with no gross errors; transformer 256×8 training.
 
 ## Next
 1. When the sweep finishes, tabulate it: `micromamba run -n $ENV python -m diagnostics.real_sweep_summary` (runbook step 16), argmax and sub-bin readout side by side.
@@ -12,11 +12,11 @@
 4. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
-- Push the five unpushed code files the runbook's steps 15, 16 and 18 depend on (`src/model.py`, `src/real_data.py`, `src/train_real.py`, `src/report_real.py`, `diagnostics/real_sweep_summary.py`) — **waiting on:** go-ahead to push.
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF.
 - Keep or delete `outputs/toy_gallery.png` (drawn by the pre-widening generator, superseded) — **waiting on:** decision.
 
 ## Done
+- 2026-11-11 — Pushed the five code files behind runbook steps 15, 16 and 18 (`src/model.py`, `src/real_data.py`, `src/train_real.py`, `src/report_real.py`, `diagnostics/real_sweep_summary.py`), no data; `.claude-backups/` added to `.gitignore` — commit 7bafced.
 - 2026-11-11 — Runbook split into card + detail, real-trace steps 12–18 added, superseded gotchas pruned — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 85eabef.
 - 2026-11-11 — ML-vs-existing-finder comparison PDF, 6 pages, unsigned steps named on every page — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local, git-ignored), `src/report_real.py`.
 - 2026-11-11 — Failure-shot check: both models place all five landmarks on every shot where the existing finder found three — `diagnostics/real_hard_cases.py`, plot local and git-ignored.
