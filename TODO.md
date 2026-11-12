@@ -1,17 +1,20 @@
 # VFE-board QC peak finding (ML) — TODO
 
-**Last updated:** 2026-11-11
+**Last updated:** 2026-11-12
 
 ## Now
-- Nothing in flight.
+- Working copy `~/Documents/vfe_peak_ml/vfe-peak-ml` is at 0a9b4ff, behind `origin/main` (runbook and TODO commits) — `git pull --ff-only` there waits on your OK.
 
 ## Next
 1. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
+- Clone https://gitlab.cern.ch/opotok/lvr-tester into `~/Documents/vfe_peak_ml/lvr-tester` — **waiting on:** the exact clone URL, or membership for `smahata` on that project. Kerberos clone (`https://:@gitlab.cern.ch:8443/opotok/lvr-tester.git`, valid ticket) returns "project could not be found or you don't have permission"; plain HTTPS redirects to sign-in, SSH is denied (no key).
 
 ## Done
+- 2026-11-12 — Runbook updated: working copy recorded, step 9 expect = 11-page real-only write-up, P0 decision in Conventions, gotcha for step-2 files lost from `/tmp` — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 7541afb.
+- 2026-11-12 — Working folder `~/Documents/vfe_peak_ml/` made: git clone of the repo at 0a9b4ff plus copies of the local `data/`, `outputs/`, `writeup/plots/real/`, `writeup/outputs/` and real diagnostics PNGs (2.0 GB, `git status` clean). Step-2 listing and YAML folder were lost from `/tmp` at shutdown and are not in it.
 - 2026-11-11 — Decided: on the two held-out 12 V shots where network and rule disagree on P0, the rule is right (small bump at the start of the rise into A1); the network's P0 there is a miss, flagged by its low confidence — `diagnostics/2026-11-11_real_p0_misses.png` (local).
 - 2026-11-11 — Both PDFs rebuilt on the new P0: ML-vs-finder (7 pages) and write-up (11 pages, real data only); report model stays U-Net 32/4 seed 0 — `outputs/real/2026-11-11_ml_vs_finder.pdf`, `writeup/outputs/vfe_peak_ml_writeup.pdf` (local).
 - 2026-11-11 — All 11 models retrained on the new P0 labels (report model, transformer, 7-config sweep, seeds 1–2 for 16/3 and 32/4); old models kept in `outputs/real/old_p0inrush/`, old dataset in `data/real_shots_p0inrush.npz` (local).
