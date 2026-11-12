@@ -1,9 +1,12 @@
 # VFE-board QC peak finding (ML) — Runbook (detail)
 
-**Last updated:** 2026-11-11
+**Last updated:** 2026-11-12
 **Card:** `RUNBOOK_vfe_peak_ml.md` — commands only.
 **Where it runs:** this machine, `$ENV` micromamba env, NVIDIA RTX 4070 Laptop GPU (8 GB).
 Every command runs from the repository root (`python -m src...` imports the repo's packages).
+Working copy: `~/Documents/vfe_peak_ml/vfe-peak-ml` — a clone of the repo with the local,
+git-ignored `data/`, `outputs/`, `writeup/plots/real/`, `writeup/outputs/` and real
+diagnostics PNGs copied in.
 
 ## Overview
 
@@ -108,9 +111,9 @@ Needs steps 5 (`outputs/real/transformer`) and 6 (`outputs/real/sweep/u32l4` and
 re-runs).
 **Expect:** 8 PNG paths and
 `perpeak_table.tex`, `sweep_table.tex`, `numbers.tex` (`writeup/plots/real/`), no assertion
-error; `writeup/outputs/vfe_peak_ml_writeup.pdf`, 16 pages; `grep -E "LaTeX Warning|Overfull"`
-on the log shows only one 2.6 pt overfull line in the abstract. Every page footer names the
-unsigned steps.
+error; `writeup/outputs/vfe_peak_ml_writeup.pdf`, 11 pages, real data only;
+`grep -E "LaTeX Warning|Overfull"` on the log shows only one 2.6 pt overfull line (Method,
+read-out paragraph). Every page footer names the unsigned steps.
 
 ## Conventions
 
@@ -129,6 +132,9 @@ unsigned steps.
   Steps of up to 5 mA against the direction are tolerated. No peak, or a walk more than 3 ms
   before A1 → P0 is NaN and the shot is neither trained on nor scored. The rule needs A1, so
   finder-failure shots have no P0 label. Checked with `diagnostics/real_p0_rule.py`.
+  Where network and rule disagree on P0, the rule is right: on the two held-out 12 V shots
+  more than 1 ms apart, the rule's P0 is a small bump at the start of the rise into A1 and
+  the network's P0 is a miss, flagged by its low confidence (decided 2026-11-11).
 - **Real landmark map:** P0 = peak before A1, P1 = A1, P2 = B1, P3 = A2, P4 = B2 (4-peak test).
 - **No simulated data.** Toy generator, toy models, deck and toy figures were removed
   (commit 6ef0dc9); only real traces are used.
@@ -183,6 +189,11 @@ unsigned steps.
   folder.
   **Cause:** files are written only after the last epoch.
   **Fix:** rerun that config; finished folders are complete and need no rerun.
+- **Symptom:** after a reboot, `<members.txt>` and `<yaml_dir>` from step 2 are gone, so
+  step 4 cannot be rerun.
+  **Cause:** they were put under `/tmp`, which is cleared at shutdown.
+  **Fix:** rerun step 2 into a folder outside `/tmp` (and outside the repo). `data/` and
+  `outputs/` are unaffected.
 - **Symptom:** `Command 'python' not found`, or `No module named diagnostics` / `src`.
   **Cause:** the shell has no bare `python`, or the command ran outside the repository root.
   **Fix:** `cd` to the repo root and use `micromamba run -n $ENV python -m ...`.
@@ -222,3 +233,6 @@ unsigned steps.
   dropped, steps renumbered 1–9. P0 redefined from the inrush spike to the peak just before
   A1 (walking rule); `normalise` moved to `src/model.py`; all models retrained on the new
   labels.
+- 2026-11-12 — Working copy `~/Documents/vfe_peak_ml/vfe-peak-ml` recorded; step 9 expect
+  updated to the 11-page real-only write-up; P0 decision (rule over network on disagreement)
+  added to Conventions; gotcha for step-2 files lost from `/tmp` at shutdown.

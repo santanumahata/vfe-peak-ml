@@ -2,6 +2,7 @@
 
 **Detail:** `RUNBOOK_vfe_peak_ml-DETAIL.md` — expected output, gotchas, conventions, changelog.
 **Where it runs:** this machine, `$ENV` micromamba env, RTX 4070 GPU; every command from the repo root.
+**Working copy:** `~/Documents/vfe_peak_ml/vfe-peak-ml` (clone + local data and outputs).
 
 ### 1. Environment
 ```bash
