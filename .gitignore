@@ -19,3 +19,6 @@ outputs/real/
 .claude-backups/
 writeup/plots/real/
 writeup/outputs/
+
+# describes a private repository
+knowledge/lvr_tester.md

@@ -3,16 +3,29 @@
 **Last updated:** 2026-11-12
 
 ## Now
-- Working copy `~/Documents/vfe_peak_ml/vfe-peak-ml` is at 0a9b4ff, behind `origin/main` (runbook and TODO commits) — `git pull --ff-only` there waits on your OK.
+- ML measurements from the network's peaks (tester width/edge code + verdict table), closure test, Finder-vs-ML measurement table in replay — being written, not yet reviewed or run by me (`lvr_tester/ml/`, `diagnostics/ml_measure_closure.py`, uncommitted).
+- Working copy `~/Documents/vfe_peak_ml/vfe-peak-ml` is behind `origin/main`, and its local data lacks `data/archive_yaml` and `outputs/real/finder_vs_ml/` — `git pull --ff-only` and rsync wait on your OK.
 
 ## Next
-1. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+1. Review the measurement work: closure test must reproduce the finder exactly; then rebuild the replay folder (keeps `review.csv`) and restart the replay window.
+2. Run `python -m diagnostics.judge_disagreements data/archive_yaml` and go through the disagreements.
+3. Settle one P0 definition with Onur ("nearest" vs "tallest"; `docs/IDEAS.md` item 1).
+4. Commit `ml-peak-review` and push it to the private GitHub mirror.
+5. Live use: ONNX export, network run per shot in the tester, review before Confirm with Confirm locked.
+6. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
-- Clone https://gitlab.cern.ch/opotok/lvr-tester into `~/Documents/vfe_peak_ml/lvr-tester` — **waiting on:** the exact clone URL, or membership for `smahata` on that project. Kerberos clone (`https://:@gitlab.cern.ch:8443/opotok/lvr-tester.git`, valid ticket) returns "project could not be found or you don't have permission"; plain HTTPS redirects to sign-in, SSH is denied (no key).
+- Network values in the tester's DB — **waiting on:** the sign-off above and Onur's agreement.
+- Push of lvr-tester to the private GitHub mirror — **waiting on:** a working token.
 
 ## Done
+- 2026-11-12 — Runbook steps 10–14 (YAMLs into `data/archive_yaml`, today's finder vs the network, tester GUI on the laptop, replay folder, replay GUI with review), new conventions and four gotchas; `knowledge/` created (`lvr_tester.md` git-ignored); `docs/IDEAS.md` — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`.
+- 2026-11-12 — Per-peak review strip in replay: Finder / ML / Neither per flagged landmark, Prev / Next, F / M / N keys, choices written to `review.csv` (first real choices saved) — `lvr_tester/ui/review_strip.py`, `plot_panel.py`, branch `ml-peak-review` (uncommitted).
+- 2026-11-12 — Replay mode `--replay DIR`: finder (left) and network (right) side by side, zoomed to the landmarks, Zoom out button, disagreements over 0.02 ms in red; `selftest --replay` prints `replay OK` — `main.py`, `lvr_tester/ui/plot_panel.py`; replay folder built by `diagnostics/make_replay_run.py` (untracked) into `~/Documents/vfe_peak_ml/replay/`.
+- 2026-11-12 — Tester GUI runs on this laptop: launcher `~/Documents/vfe_peak_ml/run_lvr_tester.sh`, desktop icons, `_runner_python` falls back off Windows so Check instruments no longer crashes; tester pytest matches `main` (14 failed / 809 passed / 19 skipped).
+- 2026-11-12 — lvr-tester cloned to `~/Documents/vfe_peak_ml/lvr-tester` at `main` 3bbad75, remotes `origin` (GitLab) and `github` (private mirror, not yet pushed).
+- 2026-11-12 — Today's finder vs the network on held-out shots, judging tool, three new PDF pages — `diagnostics/finder_vs_ml.py`, `diagnostics/judge_disagreements.py`, `src/report_real.py`, commit 156ce20.
 - 2026-11-12 — Runbook updated: working copy recorded, step 9 expect = 11-page real-only write-up, P0 decision in Conventions, gotcha for step-2 files lost from `/tmp` — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 7541afb.
 - 2026-11-12 — Working folder `~/Documents/vfe_peak_ml/` made: git clone of the repo at 0a9b4ff plus copies of the local `data/`, `outputs/`, `writeup/plots/real/`, `writeup/outputs/` and real diagnostics PNGs (2.0 GB, `git status` clean). Step-2 listing and YAML folder were lost from `/tmp` at shutdown and are not in it.
 - 2026-11-11 — Decided: on the two held-out 12 V shots where network and rule disagree on P0, the rule is right (small bump at the start of the rise into A1); the network's P0 there is a miss, flagged by its low confidence — `diagnostics/2026-11-11_real_p0_misses.png` (local).
@@ -37,10 +50,10 @@
 - 2026-11-10 — ±2-sample study on apex labels (target width / epochs sweep, sub-sample decoding, oracle readers); none beat the current model; new deck slide — commit 76d7df1.
 - 2026-11-10 — Apex-ambiguity and decoding checks, training sweep overrides — commit e7782bd.
 - 2026-11-10 — Public repo created and first push — https://github.com/santanumahata/vfe-peak-ml, commit 73bb33d.
+
+## Done (archive)
 - 2026-11-10 — Toy labels moved to the visible apex; P0 placed 10–60 samples ahead of P1; retrained, toy P0 gross miss 2.3 % → 0.8 % — `src/toy_waveforms.py`, commit 73bb33d.
 - 2026-11-10 — Apex reporting with guarded snap — `src/refine.py`, commit 73bb33d.
 - 2026-11-10 — Lab deck, dark-beamer style, with backup section — `talk/outputs/vfe_peak_ml.pdf`, commit 73bb33d.
 - 2026-11-09 — Runbook created — `docs/RUNBOOK_vfe_peak_ml.md`.
 - 2026-11-09 — Toy generator, heat-map U-Net, hybrid stage and ablation, toy results PDF — `outputs/vfe_peak_ml_report.pdf`.
-
-## Done (archive)

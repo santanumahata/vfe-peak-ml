@@ -44,10 +44,35 @@ micromamba run -n $ENV python -m diagnostics.real_hard_cases outputs/real/unet o
 
 ### 8. ML vs finder PDF
 ```bash
-micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4
+micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4 data/archive_yaml
 ```
 
 ### 9. Full write-up (LaTeX note)
 ```bash
 micromamba run -n $ENV python -m writeup.make_figures && cd writeup/src && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex
+```
+
+### 10. Result YAMLs into the repo's data folder
+```bash
+mkdir -p data/archive_yaml && tar -xf ~/Downloads/results.tar -C data/archive_yaml --no-same-owner --no-same-permissions --wildcards 'results/*/*.yaml'
+```
+
+### 11. Today's finder vs the network on the held-out shots
+```bash
+micromamba run -n $ENV python -m diagnostics.finder_vs_ml data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester
+```
+
+### 12. Tester GUI on this laptop
+```bash
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest; tail -3 ~/Documents/vfe_peak_ml/lvr_tester_gui.log
+```
+
+### 13. Build a replay folder from an archived run
+```bash
+micromamba run -n $ENV python -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --run <run>
+```
+
+### 14. Replay in the GUI, side by side, with the peak review
+```bash
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/<run>; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/<run>
 ```

@@ -15,7 +15,10 @@ input-current trace (scope channel C4) with five landmarks: P0 the peak just bef
 then P1–P4 = A1, B1, A2, B2. Steps 2–9 work on the tester's archive of `.trc` traces and
 result YAMLs: the finder's own output on each shot is the training label for P1–P4, P0
 comes from a rule; a 1D heat-map network is trained and scored split by run, compared with
-the finder in a PDF, and written up in a LaTeX note.
+the finder in a PDF, and written up in a LaTeX note. Steps 10–14 put the network next to the
+tester's own finder: re-run today's finder on the held-out shots, run the tester GUI on this
+laptop, and replay an archived run in the GUI with the finder's and the network's peaks side
+by side and a per-peak review that records which one is right.
 
 Real data and everything derived from it stays local and git-ignored; the public repo
 carries code only.
@@ -95,11 +98,14 @@ the failure shots with each model's marks.
 ### 8. ML vs finder PDF
 **Known-good command:**
 ```bash
-micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4
+micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4 data/archive_yaml
 ```
-The second argument is the U-Net folder for pages 1–6 (default `outputs/real/unet`).
+The second argument is the U-Net folder for pages 1–6 (default `outputs/real/unet`); the
+third is the result-YAML folder from step 10, used for the trace zooms.
 **Expect:** a 7-page PDF (summary, agreement, clean shots, failure shots, repeatability,
-confidence, model size) and the summary and sweep rows printed. Every page names the
+confidence, model size), plus three pages when `outputs/real/finder_vs_ml/shots.csv` from
+step 11 exists (today's finder vs the network: per-landmark table and Vin bars, P0 zooms,
+A1 zooms), so 10 pages. The summary and sweep rows are printed. Every page names the
 unsigned algorithm steps; page 1 names the U-Net's width, depth, size and seed.
 
 ### 9. Full write-up (LaTeX note)
@@ -114,6 +120,65 @@ re-runs).
 error; `writeup/outputs/vfe_peak_ml_writeup.pdf`, 11 pages, real data only;
 `grep -E "LaTeX Warning|Overfull"` on the log shows only one 2.6 pt overfull line (Method,
 read-out paragraph). Every page footer names the unsigned steps.
+
+### 10. Result YAMLs into the repo's data folder
+**Known-good command:**
+```bash
+mkdir -p data/archive_yaml && tar -xf ~/Downloads/results.tar -C data/archive_yaml --no-same-owner --no-same-permissions --wildcards 'results/*/*.yaml'
+```
+**Expect:** one folder per run, `data/archive_yaml/results/<run>/<run>.yaml`. `data/` is
+git-ignored and survives reboots, unlike `/tmp`. Steps 8, 11 and 13 take `data/archive_yaml`
+as their YAML root. The archive is untrusted: YAMLs are read with `safe_load` only and
+nothing from it is run.
+
+### 11. Today's finder vs the network on the held-out shots
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -m diagnostics.finder_vs_ml data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester
+```
+`--limit N` runs the first N shots only (smoke test).
+**Expect:** missing Vin (C1) traces extracted into `data/raw/` in one tar pass, progress every
+100 shots (about 10 min for all held-out and failure shots), the summary printed, and
+`outputs/real/finder_vs_ml/shots.csv` (per shot and landmark: network time and confidence,
+today's finder time, a disagree flag at 0.02 ms, the archived finder time) plus
+`summary.json`, each with a `.meta` sidecar. `finder_exceptions` is 0, and on clean shots the
+self-check shows today's finder reproducing the archived A1–B2 times.
+
+### 12. Tester GUI on this laptop
+**Known-good command:**
+```bash
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest; tail -3 ~/Documents/vfe_peak_ml/lvr_tester_gui.log
+```
+Desktop icon `~/.local/share/applications/lvr-tester.desktop` (copy on `~/Desktop`) runs the
+same launcher without arguments.
+**Expect:** a `selftest OK — IDLE, START blocked by: …` line. START stays blocked without
+instruments, so nothing can be run, confirmed or uploaded from the laptop.
+
+### 13. Build a replay folder from an archived run
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --run <run>
+```
+`--out` defaults to `~/Documents/vfe_peak_ml/replay/<run>`.
+**Expect:** one line per shot (Vin, shot, network vs finder per landmark) and the output
+folder. Under `<out>/campaign_replay/`: `shots/shot_NNNNN_V<vin>V.npz` (the layout the
+tester's runner writes), `campaign_peaks.csv` and `campaign_shot_metrics.csv` from today's
+finder, `ml_peaks.csv` from the network, each with a `.meta` sidecar. An existing
+`review.csv` is kept and a WARNING printed.
+
+### 14. Replay in the GUI, side by side, with the peak review
+**Known-good command:**
+```bash
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/<run>; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/<run>
+```
+Icon: `~/.local/share/applications/lvr-tester-replay.desktop` (copy on `~/Desktop`).
+**Expect:** `replay OK — <n> traces, hint: …` in the log, then the window. Each "Trace <v> V"
+entry shows the finder (left) and the network (right) on a shared time axis, zoomed to the
+landmarks; **Zoom out** toggles the full trace. A network landmark more than 0.02 ms from the
+finder's is red. The review strip under the plots lists each flagged landmark of the shot
+with Finder / ML / Neither and Prev / Next; **F / M / N** work after a click into the plot;
+Neither waits for a click on the true position (Esc cancels). Each choice is written to
+`campaign_replay/review.csv` at once.
 
 ## Conventions
 
@@ -166,6 +231,28 @@ read-out paragraph). Every page footer names the unsigned steps.
   `\csname @@input\endcsname` (plain `\input` inside a tabular breaks `\bottomrule`). The
   `.tex` source therefore holds no real results; `writeup/plots/real/` and `writeup/outputs/`
   are git-ignored.
+- **Tester changes live on a local branch.** `ml-peak-review` in
+  `~/Documents/vfe_peak_ml/lvr-tester`, uncommitted, not pushed anywhere. Onur's repository
+  stays private; it goes to my private GitHub first and to Onur's only with his agreement.
+  The launcher `run_lvr_tester.sh` sits outside his repo.
+- **`runner_python` falls back off Windows.** `MainWindow._runner_python` uses the configured
+  interpreter on Windows or when it exists, else `sys.executable`; the DB-upload and sync
+  calls go through it too.
+- **Disagree = more than 0.02 ms** between the network and the finder for a landmark
+  (`ML_TOL_MS` in `plot_panel.py`, the same flag as `finder_vs_ml`).
+- **Review rules.** The operator chooses only where the two disagree, one choice per
+  landmark (finder / ml / neither + clicked time); agreed landmarks are saved as `agree` with
+  the finder's value. `review.csv` columns: shot_index, vin_setting, landmark, finder_ms,
+  ml_ms, choice, chosen_ms, operator, timestamp; written atomically on the first choice;
+  resuming needs the saved finder and network times to match within 1e-3 ms. A reviewed
+  `review.csv` is never overwritten by a rebuild.
+- **Retraining is manual on the laptop GPU; the bench gets an ONNX export.** Network values
+  go into the DB only after the unsigned steps are signed off and Onur agrees.
+- **Two P0 definitions exist.** My labels: the peak just before A1 (`p0_before_a1`). The
+  finder: `peak0.selection` in `configuration/base/measurement_base.yaml`, "nearest" or
+  "tallest" in the window before A1; the P0 limits in `incoming_A.yaml` were derived from the
+  finder's P0. Above 10 V the C+D bump splits in two and the more prominent hump changes from
+  shot to shot, so the two definitions can differ there.
 - **Algorithm steps are unsigned.** No `docs/algorithm_*.md` exists yet; any deliverable
   names the unsigned steps (dataset build and P0 rule, run split, training, peak readout).
 
@@ -192,11 +279,27 @@ read-out paragraph). Every page footer names the unsigned steps.
 - **Symptom:** after a reboot, `<members.txt>` and `<yaml_dir>` from step 2 are gone, so
   step 4 cannot be rerun.
   **Cause:** they were put under `/tmp`, which is cleared at shutdown.
-  **Fix:** rerun step 2 into a folder outside `/tmp` (and outside the repo). `data/` and
-  `outputs/` are unaffected.
+  **Fix:** use `data/archive_yaml` from step 10 as `<yaml_dir>`, and keep `<members.txt>`
+  under `data/` too.
 - **Symptom:** `Command 'python' not found`, or `No module named diagnostics` / `src`.
   **Cause:** the shell has no bare `python`, or the command ran outside the repository root.
   **Fix:** `cd` to the repo root and use `micromamba run -n $ENV python -m ...`.
+- **Symptom:** "Check instruments" in the tester crashes with `FileNotFoundError` on a
+  `C:\Users\...\python.exe` path.
+  **Cause:** `runner_python` in the tester config is the bench's Windows interpreter.
+  **Fix:** the `_runner_python` fallback (Conventions); on Linux it uses the running python.
+- **Symptom:** `pkill -f "python main.py --replay"` kills the shell that runs it (exit 144).
+  **Cause:** the pattern matches the shell's own command line.
+  **Fix:** `pkill -f "[m]ain.py --replay"`.
+- **Symptom:** the replay window shows one plot instead of two, with no network markers.
+  **Cause:** the replay folder was rebuilt (step 13) while the window was open, and it
+  redrew while `ml_peaks.csv` was missing.
+  **Fix:** click another Trace entry, or restart the window.
+- **Symptom:** the tester's `pytest` reports 14 failures, and a file literally named
+  `Z:\nonexistent\dir\r.sqlite` appears in its root.
+  **Cause:** failures already present upstream; the same 14 fail on `main`.
+  **Fix:** none needed. Compare against that baseline (14 failed / 809 passed / 19 skipped)
+  and delete the stray file.
 
 ## Changelog
 
@@ -236,3 +339,9 @@ read-out paragraph). Every page footer names the unsigned steps.
 - 2026-11-12 — Working copy `~/Documents/vfe_peak_ml/vfe-peak-ml` recorded; step 9 expect
   updated to the 11-page real-only write-up; P0 decision (rule over network on disagreement)
   added to Conventions; gotcha for step-2 files lost from `/tmp` at shutdown.
+- 2026-11-12 — Steps 10–14 added: result YAMLs into `data/archive_yaml`, today's finder vs the
+  network (`diagnostics/finder_vs_ml.py`), tester GUI on the laptop, replay folder
+  (`diagnostics/make_replay_run.py`), replay GUI with side-by-side plots and the per-peak
+  review strip. Step 8 takes the YAML root and gains three pages. Conventions: tester branch,
+  `runner_python` fallback, 0.02 ms disagree, review rules, retraining and ONNX, two P0
+  definitions. Four gotchas added; the `/tmp` gotcha now points at step 10.
