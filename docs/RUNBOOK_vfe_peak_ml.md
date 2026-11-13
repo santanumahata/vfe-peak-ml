@@ -87,3 +87,30 @@ micromamba run -n $ENV python -W ignore -m diagnostics.finder_all_shots data/arc
 mkdir -p ~/Documents/vfe_peak_ml/limits_study/data/records && tar -xf ~/Downloads/results.tar -C ~/Documents/vfe_peak_ml/limits_study/data/records --no-same-owner --no-same-permissions --wildcards 'results/*_P1_B[12]_*/*.yaml'
 cd ~/Documents/vfe_peak_ml/limits_study && micromamba run -n $ENV python diagnostics/2026-11-13_limits_distribution.py data/records ../lvr-tester/configuration/test_types/incoming_A.yaml diagnostics/2026-11-13_limits_distribution
 ```
+
+### 17. P0 label from the finder
+```bash
+micromamba run -n $ENV python -m src.relabel_p0_finder
+```
+
+### 18. Synthetic merged peaks
+```bash
+micromamba run -n $ENV python -m src.make_merges
+```
+
+### 19. Train on the relabelled and on the merged dataset
+```bash
+micromamba run -n $ENV python -m src.train_real --arch unet --base 32 --levels 4 --data data/real_shots_p0finder.npz --out outputs/real/p0finder/u32l4 > outputs/real/p0finder_u32l4.log 2>&1
+micromamba run -n $ENV python -m src.train_real --arch unet --base 32 --levels 4 --data data/real_shots_merge.npz --out outputs/real/merge/u32l4 > outputs/real/merge_u32l4.log 2>&1
+```
+
+### 20. Today's finder vs a chosen model
+```bash
+mkdir -p outputs/real/finder_vs_ml_merge && micromamba run -n $ENV python -W ignore -m diagnostics.finder_vs_ml data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --data data/real_shots_p0finder.npz --pred outputs/real/merge/u32l4/predictions.npz --out outputs/real/finder_vs_ml_merge --min-conf 0.5 > outputs/real/finder_vs_ml_merge/full_run.log 2>&1
+```
+
+### 21. All held-out shots of one test type in the GUI
+```bash
+micromamba run -n $ENV python -W ignore -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --table outputs/real/finder_vs_ml_merge/shots.csv --test-type incoming_A --out ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
+```

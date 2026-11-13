@@ -25,6 +25,9 @@ tester's current limits with the distribution over the production cards.
 Real data and everything derived from it stays local and git-ignored; the public repo
 carries code only.
 
+Steps 17–21 retrain on the finder's own P0 and on synthetic merged peaks, compare that
+model with today's finder and show every held-out shot of one test type in the tester GUI.
+
 ## Steps
 
 ### 1. Environment
@@ -215,10 +218,76 @@ outside it, and the margin from each window edge to the nearest board. The PDF h
 per quantity, four voltage panels, current limits dashed. Both carry a `.meta` sidecar and
 name the unsigned steps.
 
+### 17. P0 label from the finder
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -m src.relabel_p0_finder
+```
+**Expect:** one line `data/real_shots_p0finder.npz shots=… labelled=… newly_labelled_p0=…
+moved_over_0.02ms=… moved_over_0.1ms=…`, then the path; a `.meta` beside it. Needs step 15's
+`outputs/real/finder_all/shots.csv`. The script stops if the output exists, if a card peak in
+the dataset differs from today's finder by more than 0.001 ms, or if a new P0 is outside the
+trace or not before A1. Only `P[:, 0]` changes, on the labelled shots; the old value is kept
+as `P0_rule`, the finder's `turnover` / `shoulder` as `P0_kind`. `run`, `n_found` and `good`
+are untouched, so the run split is the same. Finder-failure shots stay unlabelled.
+
+### 18. Synthetic merged peaks
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -m src.make_merges
+```
+**Expect:** one line `data/real_shots_merge.npz merge_depth_A=0.3 max_depth_A=0.7 seed=0
+real=… synthetic=… skipped=0 merged=… from_train=… from_val=… merged_by_pair={…}`, then the
+path; a `.meta` beside it. About half the synthetic shots come out merged. Real rows come
+first and are identical to step 17's file; one synthetic shot is appended per labelled
+training or validation shot, in the same run; hard-test runs get none. New arrays:
+`synthetic`, `src_idx`, `merge_pair` (1 = A1+B1, 2 = B1+A2, 3 = A2+B2), `merge_depth_A`;
+`finder_t_ms` is NaN on synthetic rows. A merged shot has exactly one NaN landmark.
+
+### 19. Train on the relabelled and on the merged dataset
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -m src.train_real --arch unet --base 32 --levels 4 --data data/real_shots_p0finder.npz --out outputs/real/p0finder/u32l4 > outputs/real/p0finder_u32l4.log 2>&1
+micromamba run -n $ENV python -m src.train_real --arch unet --base 32 --levels 4 --data data/real_shots_merge.npz --out outputs/real/merge/u32l4 > outputs/real/merge_u32l4.log 2>&1
+```
+**Expect:** as step 5; about 8 min for the first and 15 min for the second on the laptop GPU
+(the second has twice the training shots). The first changes only the P0 label, the second
+adds the merges, so a change on real shots can be assigned to one of them. With a dataset
+that has a `synthetic` array, `metrics.json` gains `n_train_synthetic` and a `val_synthetic`
+block (position error on the landmarks that are there, share of present landmarks with
+confidence ≥ 0.5, share of absent ones below it), and `predictions.npz` gains `synval_pos`,
+`synval_conf`, `synval_idx`. `val` and `val_idx` cover real validation shots only, so they
+stay comparable with earlier models.
+
+### 20. Today's finder vs a chosen model
+**Known-good command:**
+```bash
+mkdir -p outputs/real/finder_vs_ml_merge && micromamba run -n $ENV python -W ignore -m diagnostics.finder_vs_ml data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --data data/real_shots_p0finder.npz --pred outputs/real/merge/u32l4/predictions.npz --out outputs/real/finder_vs_ml_merge --min-conf 0.5 > outputs/real/finder_vs_ml_merge/full_run.log 2>&1
+```
+**Expect:** as step 11 (about 10 min), written to the `--out` folder; step 11's own folder is
+untouched. `--min-conf` blanks a model landmark whose confidence is below it (the model says
+it is not there); a blank on one side only counts as a disagreement. `--limit 8` is a quick
+check. Without the options the script behaves as in step 11.
+
+### 21. All held-out shots of one test type in the GUI
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -W ignore -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --table outputs/real/finder_vs_ml_merge/shots.csv --test-type incoming_A --out ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
+```
+**Expect:** first `<n> runs of incoming_A; left out: [...]` (runs of another test type), one
+line per shot, then the folder path; about 10 min and about 3 MB per shot. Shots are ordered
+by voltage, run, shot; `campaign_replay/replay_index.csv` maps each shot number to run,
+voltage, shot and set. The self-test prints `replay OK — 4 traces …` and
+`replay table OK — 6 columns, … rows`; the last command opens the window as in step 14.
+`--table` picks the comparison folder of step 20; without `--test-type` the script builds one
+run as in step 13.
+
 ## Conventions
 
 - **Exactly five landmarks.** The model always returns five positions; a doubtful peak is
-  signalled by low heat-map confidence, never by a shorter output.
+  signalled by low heat-map confidence, never by a shorter output. For the merge model a
+  landmark with confidence below 0.5 counts as not there (`--min-conf 0.5` in step 20).
 - **Output:** five per-sample heat-map channels, position = argmax, confidence = max sigmoid.
   Chosen over regressing five numbers so QC gets a per-peak confidence.
 - **Input scaling:** per-trace median subtraction, then division by max |value|. Every
@@ -239,7 +308,23 @@ name the unsigned steps.
 - **No simulated data, with one exception.** Toy generator, toy models, deck and toy figures
   were removed (commit 6ef0dc9); only real traces are used. Exception (decided 2026-11-13):
   the model that handles merged peaks is trained on synthetic merges, because the archive
-  holds no labelled merged shots.
+  holds no merged shots (today's finder finds four separate peaks on every shot).
+- **Merged-peak rule (decided 2026-11-13).** Valley depth = lower apex minus the minimum
+  between the two apexes. Under 0.3 A the two pulses are one peak, labelled at the taller
+  apex; the lower landmark is NaN and trains an all-zero heat-map. 0.3 A or more: both keep
+  their labels. 0.3 A sits between the two figures in the finder's settings note (notch under
+  0.1 A, real valley about 0.8 A); it is my choice, not checked on a real merged shot.
+- **Synthetic merges are cut, not added (decided 2026-11-13).** `src/make_merges.py` deletes
+  the stretch between two neighbouring card pulses at a chosen current level, so every sample
+  is real; the join is smoothed over a few bins. The depth is measured again on the finished
+  trace and the label follows that measurement. P0 keeps the finder's label on every shot.
+  Because the taller pulse survives, almost only "A1 absent" and "A2 absent" are trained.
+- **Datasets sit side by side.** `data/real_shots.npz` (P0 by my rule), `…_p0finder.npz`
+  (P0 from the finder), `…_merge.npz` (the latter plus synthetic shots). Models go to
+  `outputs/real/p0finder/<tag>/` and `outputs/real/merge/<tag>/`; nothing is overwritten.
+- **One replay folder holds one test type.** The GUI takes one test type and one set of peak
+  names per folder, so pooled folders are built per test type (step 21). Their verdict table
+  pools many boards and describes no single board; the per-shot view and the review do.
 - **Real binning:** traces stored at 200 ns are averaged in blocks of 50 into 10 µs bins and
   padded to 5120.
 - **Split by run, never by shot** — shots inside a run are near-copies. Runs containing a
@@ -262,6 +347,7 @@ name the unsigned steps.
   from it.
 - **Real data stays local.** `data/`, `outputs/real/` and `diagnostics/*_real_*` are
   git-ignored; the public repo gets code only, and docs carry no real results or run IDs.
+  `diagnostics/make_replay_run.py` stays untracked while its default run is a real run ID.
 - **Write-up numbers are macros.** Every real-data number in
   `writeup/src/vfe_peak_ml_writeup.tex` is a `\newcommand` generated into
   `writeup/plots/real/numbers.tex`, and the real tables are generated `.tex` rows read with
@@ -289,8 +375,8 @@ name the unsigned steps.
   finder: `peak0.selection` in `configuration/base/measurement_base.yaml`, "nearest" or
   "tallest" in the window before A1; the P0 limits in `incoming_A.yaml` were derived from the
   finder's P0. Above 10 V the C+D bump splits in two and the more prominent hump changes from
-  shot to shot, so the two definitions can differ there. Decided 2026-11-13: the next model
-  takes its P0 label from the finder's rule (step 15's output); the current dataset and
+  shot to shot, so the two definitions can differ there. Decided 2026-11-13: the model takes
+  its P0 label from the finder's rule (step 15's output, step 17); the earlier dataset and
   models are kept beside it.
 - **Tester safeguards are read-only.** Voltage and amplitude values and every safeguard in
   the tester stay untouched: the `hard:` limits and `voltages:` of
@@ -303,7 +389,8 @@ name the unsigned steps.
   per-voltage board mean stored in the record, voltage points without all four peaks in
   every shot left out.
 - **Algorithm steps are unsigned.** No `docs/algorithm_*.md` exists yet; any deliverable
-  names the unsigned steps (dataset build and P0 rule, run split, training, peak readout).
+  names the unsigned steps (dataset build and P0 rule, run split, training, peak readout,
+  synthetic merge generation).
 
 ## Gotchas
 
@@ -356,6 +443,17 @@ name the unsigned steps.
   **Fix:** `git pull --ff-only`, then `rsync -a -n -i --exclude .git --exclude __pycache__
   <other folder>/ ./` to list the differences, and the same without `-n` to copy them.
 
+- **Symptom:** `collect() gave <N> shots, npz has <M>: record order cannot be trusted`
+  from `diagnostics.finder_vs_ml`.
+  **Cause:** `--data` pointed at the merged dataset; the script checks the archive's shot
+  count against the dataset's rows.
+  **Fix:** pass `--data data/real_shots_p0finder.npz`. The real rows and their indices are the
+  same in both files, so the merge model's saved predictions still line up.
+- **Symptom:** `AssertionError: no shot_*_V<n>V.npz under replay/...` from the launcher's
+  `--selftest --replay`.
+  **Cause:** a relative replay path; the launcher changes into the tester folder first.
+  **Fix:** give the replay folder as an absolute path.
+
 ## Changelog
 
 - 2026-11-09 — Runbook created: toy generator, CNN heat-map model, hybrid and ablation, six
@@ -405,3 +503,7 @@ name the unsigned steps.
   production cards. Conventions: synthetic merges allowed for the merged-peak model, P0 label
   from the finder's rule for the next model, tester safeguards read-only, limits unchanged.
   One gotcha added (working copy behind, files only in another folder).
+- 2026-11-13 — Steps 17–21 added: P0 label from the finder, synthetic merged peaks, training
+  on both datasets, finder vs a chosen model, all held-out shots of one test type in the GUI.
+  Conventions for the merged-peak rule, the cut-valley generator, dataset and model folders,
+  pooled replay folders; two gotchas (dataset row count in the comparison, relative replay path).
