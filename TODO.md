@@ -1,25 +1,31 @@
 # VFE-board QC peak finding (ML) — TODO
 
-**Last updated:** 2026-11-12
+**Last updated:** 2026-11-13
 
 ## Now
-- ML measurements from the network's peaks (tester width/edge code + verdict table), closure test, Finder-vs-ML measurement table in replay — being written, not yet reviewed or run by me (`lvr_tester/ml/`, `diagnostics/ml_measure_closure.py`, uncommitted).
-- Working copy `~/Documents/vfe_peak_ml/vfe-peak-ml` is behind `origin/main`, and its local data lacks `data/archive_yaml` and `outputs/real/finder_vs_ml/` — `git pull --ff-only` and rsync wait on your OK.
+- Model update, P0 from the finder's rule plus merged peaks trained on synthetic merges: finder output for every shot is ready (`outputs/real/finder_all/shots.csv`); relabel, merge generator and retraining not started; merged-peak output design proposed, not yet confirmed.
+- ML measurements from the network's peaks: closure test is exact on 220 shots (`outputs/real/finder_vs_ml/ml_measure_closure.json`); `lvr_tester/ml/` read through, open points not fixed (peak count never tested, P0 cap and gap guard not applied to a network P0); still uncommitted.
 
 ## Next
-1. Review the measurement work: closure test must reproduce the finder exactly; then rebuild the replay folder (keeps `review.csv`) and restart the replay window.
-2. Run `python -m diagnostics.judge_disagreements data/archive_yaml` and go through the disagreements.
-3. Settle one P0 definition with Onur ("nearest" vs "tallest"; `docs/IDEAS.md` item 1).
-4. Commit `ml-peak-review` and push it to the private GitHub mirror.
-5. Live use: ONNX export, network run per shot in the tester, review before Confirm with Confirm locked.
-6. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+1. Show the relabel and merge-generator scripts, retrain, re-run runbook step 11, rebuild the replay folder (keeps `review.csv`) and restart the replay window.
+2. Decide which findings of the 2026-11-13 code review to fix (failed `review.csv` save hidden, hand-set positions dropped on a model re-run, unsigned review rows, `--replay` taking the bench lock, among others).
+3. Run `python -m diagnostics.judge_disagreements data/archive_yaml` and go through the disagreements.
+4. Settle one P0 definition with Onur ("nearest" vs "tallest"; `docs/IDEAS.md` item 1).
+5. Commit `ml-peak-review` and push it to the private GitHub mirror.
+6. Live use: ONNX export, network run per shot in the tester, review before Confirm with Confirm locked.
+7. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
 - Network values in the tester's DB — **waiting on:** the sign-off above and Onur's agreement.
 - Push of lvr-tester to the private GitHub mirror — **waiting on:** a working token.
+- Peak 0 limits against the board distribution — **waiting on:** `scripts/peak0_reanalysis.csv` from the bench.
 
 ## Done
+- 2026-11-13 — Today's finder run on all 2984 shots: 4 peaks on every shot, P0 kind turnover 2902 / shoulder 82, 341 s with 12 workers — `diagnostics/finder_all_shots.py` (untracked), `outputs/real/finder_all/shots.csv`, `full_run.log` (local).
+- 2026-11-13 — Runbook steps 15–16, four conventions (P0 label from the finder's rule, synthetic merges allowed, tester safeguards read-only, limits unchanged) and one gotcha — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`.
+- 2026-11-13 — Limits study on the production A cards, one record per board: table and plots of board means against the current windows; limits unchanged — `~/Documents/vfe_peak_ml/limits_study/diagnostics/2026-11-13_limits_distribution.{py,csv,pdf}`.
+- 2026-11-13 — Working copy brought to f05695f and completed from the other folder; a second rsync dry run lists 0 differences.
 - 2026-11-12 — Runbook steps 10–14 (YAMLs into `data/archive_yaml`, today's finder vs the network, tester GUI on the laptop, replay folder, replay GUI with review), new conventions and four gotchas; `knowledge/` created (`lvr_tester.md` git-ignored); `docs/IDEAS.md` — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`.
 - 2026-11-12 — Per-peak review strip in replay: Finder / ML / Neither per flagged landmark, Prev / Next, F / M / N keys, choices written to `review.csv` (first real choices saved) — `lvr_tester/ui/review_strip.py`, `plot_panel.py`, branch `ml-peak-review` (uncommitted).
 - 2026-11-12 — Replay mode `--replay DIR`: finder (left) and network (right) side by side, zoomed to the landmarks, Zoom out button, disagreements over 0.02 ms in red; `selftest --replay` prints `replay OK` — `main.py`, `lvr_tester/ui/plot_panel.py`; replay folder built by `diagnostics/make_replay_run.py` (untracked) into `~/Documents/vfe_peak_ml/replay/`.
@@ -46,12 +52,12 @@
 - 2026-11-11 — Real-trace U-Net and transformer trained and scored on held-out runs; both met the done criteria (median ≤ 0.02 ms, ≥ 99 % within 0.1 ms), U-Net ahead — `outputs/real/{unet,transformer}/metrics.json` (local).
 - 2026-11-11 — Real dataset built from the tester archive, finder output kept for every shot — `micromamba run -n $ENV python -m src.real_data ...`, `data/real_shots.npz` (local).
 - 2026-11-11 — LeCroy `.trc` reader validated: current at the finder's reported time equals its reported amplitude; established that the finder reports the raw sample maximum — `src/trc.py`, commit 4ac652c.
+
+## Done (archive)
 - 2026-11-11 — Real-trace pipeline code pushed, no data — commit 4ac652c.
 - 2026-11-10 — ±2-sample study on apex labels (target width / epochs sweep, sub-sample decoding, oracle readers); none beat the current model; new deck slide — commit 76d7df1.
 - 2026-11-10 — Apex-ambiguity and decoding checks, training sweep overrides — commit e7782bd.
 - 2026-11-10 — Public repo created and first push — https://github.com/santanumahata/vfe-peak-ml, commit 73bb33d.
-
-## Done (archive)
 - 2026-11-10 — Toy labels moved to the visible apex; P0 placed 10–60 samples ahead of P1; retrained, toy P0 gross miss 2.3 % → 0.8 % — `src/toy_waveforms.py`, commit 73bb33d.
 - 2026-11-10 — Apex reporting with guarded snap — `src/refine.py`, commit 73bb33d.
 - 2026-11-10 — Lab deck, dark-beamer style, with backup section — `talk/outputs/vfe_peak_ml.pdf`, commit 73bb33d.
