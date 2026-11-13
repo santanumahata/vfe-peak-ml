@@ -347,7 +347,8 @@ run as in step 13.
   from it.
 - **Real data stays local.** `data/`, `outputs/real/` and `diagnostics/*_real_*` are
   git-ignored; the public repo gets code only, and docs carry no real results or run IDs.
-  `diagnostics/make_replay_run.py` stays untracked while its default run is a real run ID.
+  `diagnostics/make_replay_run.py` is tracked and has no default run: the run or the test
+  type is always given on the command line.
 - **Write-up numbers are macros.** Every real-data number in
   `writeup/src/vfe_peak_ml_writeup.tex` is a `\newcommand` generated into
   `writeup/plots/real/numbers.tex`, and the real tables are generated `.tex` rows read with
@@ -507,3 +508,5 @@ run as in step 13.
   on both datasets, finder vs a chosen model, all held-out shots of one test type in the GUI.
   Conventions for the merged-peak rule, the cut-valley generator, dataset and model folders,
   pooled replay folders; two gotchas (dataset row count in the comparison, relative replay path).
+- 2026-11-13 — `diagnostics/make_replay_run.py` committed without a default run (`--run` or
+  `--test-type` must be given); the convention that kept it untracked is replaced.

@@ -8,14 +8,13 @@
 
 ## Next
 1. Go through the pooled replay folder in the GUI (`~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge`, runbook step 21) and review the flagged landmarks.
-2. Decide on `diagnostics/make_replay_run.py`: remove its real run ID default and commit it, or keep it untracked (runbook steps 13 and 21 need it).
-3. Find why the relabelled and merge models lose P0 on more real validation shots than the old model.
-4. Decide which findings of the 2026-11-13 code review to fix (failed `review.csv` save hidden, hand-set positions dropped on a model re-run, unsigned review rows, `--replay` taking the bench lock, among others).
-5. Run `python -m diagnostics.judge_disagreements data/archive_yaml` and go through the disagreements.
-6. Settle one P0 definition with Onur ("nearest" vs "tallest"; `docs/IDEAS.md` item 1).
-7. Commit `ml-peak-review` and push it to the private GitHub mirror.
-8. Live use: ONNX export, network run per shot in the tester, review before Confirm with Confirm locked.
-9. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+2. Find why the relabelled and merge models lose P0 on more real validation shots than the old model.
+3. Decide which findings of the 2026-11-13 code review to fix (failed `review.csv` save hidden, hand-set positions dropped on a model re-run, unsigned review rows, `--replay` taking the bench lock, among others).
+4. Run `python -m diagnostics.judge_disagreements data/archive_yaml` and go through the disagreements.
+5. Settle one P0 definition with Onur ("nearest" vs "tallest"; `docs/IDEAS.md` item 1).
+6. Commit `ml-peak-review` and push it to the private GitHub mirror.
+7. Live use: ONNX export, network run per shot in the tester, review before Confirm with Confirm locked.
+8. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
@@ -24,8 +23,9 @@
 - Peak 0 limits against the board distribution — **waiting on:** `scripts/peak0_reanalysis.csv` from the bench.
 
 ## Done
+- 2026-11-13 — Replay-folder builder committed without a default run; `--run` or `--test-type` must be given, refusals tried (exit 1) — `diagnostics/make_replay_run.py`, commit 7a709e1.
 - 2026-11-13 — Runbook steps 17–21 (P0 from the finder, synthetic merges, training, finder vs a chosen model, pooled replay), conventions for the merged-peak rule and the cut-valley generator, two gotchas — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 4d3b144.
-- 2026-11-13 — Merge model against today's finder on the held-out shots, and one replay folder with all held-out `incoming_A` shots (`replay_index.csv` maps shot number to run); GUI self-test `replay OK`, window opened — `outputs/real/finder_vs_ml_merge/` (local), `diagnostics/finder_vs_ml.py` options (commit 86b15d4), `diagnostics/make_replay_run.py` options (untracked).
+- 2026-11-13 — Merge model against today's finder on the held-out shots, and one replay folder with all held-out `incoming_A` shots (`replay_index.csv` maps shot number to run); GUI self-test `replay OK`, window opened — `outputs/real/finder_vs_ml_merge/` (local), `diagnostics/finder_vs_ml.py` options (commit 86b15d4), `diagnostics/make_replay_run.py` options (commit 7a709e1).
 - 2026-11-13 — Two models trained, U-Net 32/4 seed 0: P0 relabel only and with synthetic merges; real validation stays real-only, synthetic validation scored separately — `outputs/real/p0finder/u32l4`, `outputs/real/merge/u32l4` (local), `src/train_real.py`, commit 86b15d4.
 - 2026-11-13 — Datasets built beside the old one: P0 from the finder's peak 0, then synthetic merged shots by cutting the valley between two card pulses (one peak under 0.3 A valley depth) — `src/relabel_p0_finder.py`, `src/make_merges.py`, commit 86b15d4; `data/real_shots_p0finder.npz`, `data/real_shots_merge.npz` (local).
 - 2026-11-13 — Today's finder run on all 2984 shots: 4 peaks on every shot, P0 kind turnover 2902 / shoulder 82, 341 s with 12 workers — `diagnostics/finder_all_shots.py` (commit 86b15d4), `outputs/real/finder_all/shots.csv`, `full_run.log` (local).
@@ -34,7 +34,7 @@
 - 2026-11-13 — Working copy brought to f05695f and completed from the other folder; a second rsync dry run lists 0 differences.
 - 2026-11-12 — Runbook steps 10–14 (YAMLs into `data/archive_yaml`, today's finder vs the network, tester GUI on the laptop, replay folder, replay GUI with review), new conventions and four gotchas; `knowledge/` created (`lvr_tester.md` git-ignored); `docs/IDEAS.md` — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`.
 - 2026-11-12 — Per-peak review strip in replay: Finder / ML / Neither per flagged landmark, Prev / Next, F / M / N keys, choices written to `review.csv` (first real choices saved) — `lvr_tester/ui/review_strip.py`, `plot_panel.py`, branch `ml-peak-review` (uncommitted).
-- 2026-11-12 — Replay mode `--replay DIR`: finder (left) and network (right) side by side, zoomed to the landmarks, Zoom out button, disagreements over 0.02 ms in red; `selftest --replay` prints `replay OK` — `main.py`, `lvr_tester/ui/plot_panel.py`; replay folder built by `diagnostics/make_replay_run.py` (untracked) into `~/Documents/vfe_peak_ml/replay/`.
+- 2026-11-12 — Replay mode `--replay DIR`: finder (left) and network (right) side by side, zoomed to the landmarks, Zoom out button, disagreements over 0.02 ms in red; `selftest --replay` prints `replay OK` — `main.py`, `lvr_tester/ui/plot_panel.py`; replay folder built by `diagnostics/make_replay_run.py` (commit 7a709e1) into `~/Documents/vfe_peak_ml/replay/`.
 - 2026-11-12 — Tester GUI runs on this laptop: launcher `~/Documents/vfe_peak_ml/run_lvr_tester.sh`, desktop icons, `_runner_python` falls back off Windows so Check instruments no longer crashes; tester pytest matches `main` (14 failed / 809 passed / 19 skipped).
 - 2026-11-12 — lvr-tester cloned to `~/Documents/vfe_peak_ml/lvr-tester` at `main` 3bbad75, remotes `origin` (GitLab) and `github` (private mirror, not yet pushed).
 - 2026-11-12 — Today's finder vs the network on held-out shots, judging tool, three new PDF pages — `diagnostics/finder_vs_ml.py`, `diagnostics/judge_disagreements.py`, `src/report_real.py`, commit 156ce20.
@@ -53,9 +53,9 @@
 - 2026-11-11 — Model-size sweep, 7 configs at seed 0: no larger model beats the base-16 U-Net (0.46M; 93.2 % of shots with all five within 0.02 ms on sub-bin readout); U-Nets within 1 % of each other, transformers 2–3 % lower — `diagnostics.real_sweep_summary`, `outputs/real/sweep/` (local).
 - 2026-11-11 — Pushed the five code files behind runbook steps 15, 16 and 18 (`src/model.py`, `src/real_data.py`, `src/train_real.py`, `src/report_real.py`, `diagnostics/real_sweep_summary.py`), no data; `.claude-backups/` added to `.gitignore` — commit 7bafced.
 - 2026-11-11 — Runbook split into card + detail, real-trace steps 12–18 added, superseded gotchas pruned — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 85eabef.
-- 2026-11-11 — ML-vs-existing-finder comparison PDF, 6 pages, unsigned steps named on every page — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local, git-ignored), `src/report_real.py`.
 
 ## Done (archive)
+- 2026-11-11 — ML-vs-existing-finder comparison PDF, 6 pages, unsigned steps named on every page — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local, git-ignored), `src/report_real.py`.
 - 2026-11-11 — Failure-shot check: both models place all five landmarks on every shot where the existing finder found three — `diagnostics/real_hard_cases.py`, plot local and git-ignored.
 - 2026-11-11 — Real-trace U-Net and transformer trained and scored on held-out runs; both met the done criteria (median ≤ 0.02 ms, ≥ 99 % within 0.1 ms), U-Net ahead — `outputs/real/{unet,transformer}/metrics.json` (local).
 - 2026-11-11 — Real dataset built from the tester archive, finder output kept for every shot — `micromamba run -n $ENV python -m src.real_data ...`, `data/real_shots.npz` (local).
