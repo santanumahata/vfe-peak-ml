@@ -1,6 +1,6 @@
 # VFE-board QC peak finding (ML) — Runbook (detail)
 
-**Last updated:** 2026-11-12
+**Last updated:** 2026-11-13
 **Card:** `RUNBOOK_vfe_peak_ml.md` — commands only.
 **Where it runs:** this machine, `$ENV` micromamba env, NVIDIA RTX 4070 Laptop GPU (8 GB).
 Every command runs from the repository root (`python -m src...` imports the repo's packages).
@@ -18,7 +18,9 @@ comes from a rule; a 1D heat-map network is trained and scored split by run, com
 the finder in a PDF, and written up in a LaTeX note. Steps 10–14 put the network next to the
 tester's own finder: re-run today's finder on the held-out shots, run the tester GUI on this
 laptop, and replay an archived run in the GUI with the finder's and the network's peaks side
-by side and a per-peak review that records which one is right.
+by side and a per-peak review that records which one is right. Step 15 runs today's finder
+on every shot of the dataset (the label source for the next model); step 16 compares the
+tester's current limits with the distribution over the production cards.
 
 Real data and everything derived from it stays local and git-ignored; the public repo
 carries code only.
@@ -180,6 +182,39 @@ with Finder / ML / Neither and Prev / Next; **F / M / N** work after a click int
 Neither waits for a click on the true position (Esc cancels). Each choice is written to
 `campaign_replay/review.csv` at once.
 
+### 15. Today's finder on every shot
+**Known-good command:**
+```bash
+micromamba run -n $ENV python -W ignore -m diagnostics.finder_all_shots data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --workers 12 > outputs/real/finder_all/full_run.log 2>&1
+```
+`--limit N` runs the first N shots only; `-W ignore` keeps scipy's `PeakPropertyWarning`
+lines, one per worker and shot, out of the log. Create `outputs/real/finder_all/` first when
+redirecting into it.
+**Expect:** `<N> shots, <n> Vin traces extracted` (missing C1 traces pulled into `data/raw/`
+in one tar pass), a progress line every 250 shots (about 30 s per 250 with 12 workers), then
+`shots … peaks found per shot {…} P0 kind {…}` and the path of
+`outputs/real/finder_all/shots.csv` with its `.meta`. One row per shot in npz order (`idx` =
+row of `data/real_shots.npz`): peak count, Vin crossing, P0 time / kind (`turnover` or
+`shoulder`) / amplitude, and for each of the four peaks apex time, amplitude, pulse start,
+pulse end and pulse level; blank = no answer. Check: with `--limit 16`, the P0–P4 times of a
+held-out `idx` equal those in step 11's `shots.csv`.
+
+### 16. Limits against the production-card distribution
+**Known-good command:**
+```bash
+mkdir -p ~/Documents/vfe_peak_ml/limits_study/data/records && tar -xf ~/Downloads/results.tar -C ~/Documents/vfe_peak_ml/limits_study/data/records --no-same-owner --no-same-permissions --wildcards 'results/*_P1_B[12]_*/*.yaml'
+cd ~/Documents/vfe_peak_ml/limits_study && micromamba run -n $ENV python diagnostics/2026-11-13_limits_distribution.py data/records ../lvr-tester/configuration/test_types/incoming_A.yaml diagnostics/2026-11-13_limits_distribution
+```
+Runs from `~/Documents/vfe_peak_ml/limits_study/`, not the repo root: the script, the
+extracted records and the outputs live there, outside both repositories.
+**Expect:** `boards kept: … runs skipped: … incomplete points: …`, one line per skipped run
+(an earlier run of a retested board) and per incomplete voltage point, then the two output
+paths. The CSV has one row per quantity and voltage (17 quantities × 4 voltages): number of
+boards, min / median / max, mean, std, robust sigma (1.4826 × MAD), the current window, boards
+outside it, and the margin from each window edge to the nearest board. The PDF has one page
+per quantity, four voltage panels, current limits dashed. Both carry a `.meta` sidecar and
+name the unsigned steps.
+
 ## Conventions
 
 - **Exactly five landmarks.** The model always returns five positions; a doubtful peak is
@@ -201,8 +236,10 @@ Neither waits for a click on the true position (Esc cancels). Each choice is wri
   more than 1 ms apart, the rule's P0 is a small bump at the start of the rise into A1 and
   the network's P0 is a miss, flagged by its low confidence (decided 2026-11-11).
 - **Real landmark map:** P0 = peak before A1, P1 = A1, P2 = B1, P3 = A2, P4 = B2 (4-peak test).
-- **No simulated data.** Toy generator, toy models, deck and toy figures were removed
-  (commit 6ef0dc9); only real traces are used.
+- **No simulated data, with one exception.** Toy generator, toy models, deck and toy figures
+  were removed (commit 6ef0dc9); only real traces are used. Exception (decided 2026-11-13):
+  the model that handles merged peaks is trained on synthetic merges, because the archive
+  holds no labelled merged shots.
 - **Real binning:** traces stored at 200 ns are averaged in blocks of 50 into 10 µs bins and
   padded to 5120.
 - **Split by run, never by shot** — shots inside a run are near-copies. Runs containing a
@@ -252,7 +289,19 @@ Neither waits for a click on the true position (Esc cancels). Each choice is wri
   finder: `peak0.selection` in `configuration/base/measurement_base.yaml`, "nearest" or
   "tallest" in the window before A1; the P0 limits in `incoming_A.yaml` were derived from the
   finder's P0. Above 10 V the C+D bump splits in two and the more prominent hump changes from
-  shot to shot, so the two definitions can differ there.
+  shot to shot, so the two definitions can differ there. Decided 2026-11-13: the next model
+  takes its P0 label from the finder's rule (step 15's output); the current dataset and
+  models are kept beside it.
+- **Tester safeguards are read-only.** Voltage and amplitude values and every safeguard in
+  the tester stay untouched: the `hard:` limits and `voltages:` of
+  `configuration/test_types/*.yaml`, the supply settings under `configuration/base/`, the
+  forced fields in `lvr_tester/core/yaml_build.py`, `lvr_tester/runner/psu_panic.py`, and the
+  finder thresholds in `measurement_base.yaml`.
+- **Limits stay as they are.** Step 16 only describes the distribution and feeds suggestions;
+  the windows in the tester's test types are not changed from here. Its population: the
+  production A cards, one record per board (the latest confirmed `incoming_A` run), the
+  per-voltage board mean stored in the record, voltage points without all four peaks in
+  every shot left out.
 - **Algorithm steps are unsigned.** No `docs/algorithm_*.md` exists yet; any deliverable
   names the unsigned steps (dataset build and P0 rule, run split, training, peak readout).
 
@@ -300,6 +349,12 @@ Neither waits for a click on the true position (Esc cancels). Each choice is wri
   **Cause:** failures already present upstream; the same 14 fail on `main`.
   **Fix:** none needed. Compare against that baseline (14 failed / 809 passed / 19 skipped)
   and delete the stray file.
+- **Symptom:** `knowledge/`, `docs/IDEAS.md` or `diagnostics/make_replay_run.py` are missing
+  from the working copy, and a `.meta` sidecar names a commit `git cat-file -t` cannot find.
+  **Cause:** the working copy was behind `origin/main`, and untracked scripts and local data
+  existed only in another folder.
+  **Fix:** `git pull --ff-only`, then `rsync -a -n -i --exclude .git --exclude __pycache__
+  <other folder>/ ./` to list the differences, and the same without `-n` to copy them.
 
 ## Changelog
 
@@ -345,3 +400,8 @@ Neither waits for a click on the true position (Esc cancels). Each choice is wri
   review strip. Step 8 takes the YAML root and gains three pages. Conventions: tester branch,
   `runner_python` fallback, 0.02 ms disagree, review rules, retraining and ONNX, two P0
   definitions. Four gotchas added; the `/tmp` gotcha now points at step 10.
+- 2026-11-13 — Steps 15–16 added: today's finder on every shot
+  (`diagnostics/finder_all_shots.py`) and the limits-versus-distribution study on the
+  production cards. Conventions: synthetic merges allowed for the merged-peak model, P0 label
+  from the finder's rule for the next model, tester safeguards read-only, limits unchanged.
+  One gotcha added (working copy behind, files only in another folder).
