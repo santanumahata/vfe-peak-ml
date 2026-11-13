@@ -90,28 +90,34 @@ def run_finder(Analyzer, analysis, read_trc, c1, c4):
     # Total: time O(samples) per shot, UNVERIFIED inside lvr_scope, space O(samples)
 
 
-def write_meta(path, inputs, params):
-    """Provenance sidecar <file>.meta."""
+def write_meta(path, inputs, params, script="diagnostics/finder_vs_ml.py"):
+    """Provenance sidecar <file>.meta; `script` names the producer."""
     try:
         sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
     except OSError:
         sha = "no-repo"
-    meta = {"script": "diagnostics/finder_vs_ml.py", "commit": sha or "no-repo", "inputs": inputs,
+    meta = {"script": script, "commit": sha or "no-repo", "inputs": inputs,
             "timestamp": datetime.datetime.now().isoformat(timespec="seconds"), "params": params}
     pathlib.Path(str(path) + ".meta").write_text(json.dumps(meta, indent=1) + "\n")
     # Total: time O(1), space O(1)
 
 
 def main():
+    global OUT                                                  # the helpers above write under OUT
     ap = argparse.ArgumentParser()
     ap.add_argument("yaml_root")
     ap.add_argument("lvr_tester")
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--data", default=DATA)
+    ap.add_argument("--pred", default=PRED)
+    ap.add_argument("--out", default=str(OUT))
+    ap.add_argument("--min-conf", type=float, default=0.0)     # below this the model's landmark counts as absent
     a = ap.parse_args()
+    OUT = pathlib.Path(a.out)
     OUT.mkdir(parents=True, exist_ok=True)
 
-    d = np.load(DATA)
-    pr = np.load(PRED)
+    d = np.load(a.data)
+    pr = np.load(a.pred)
     t0, dt = d["t0_ms"], d["dt_ms"]
     members = shot_members(a.yaml_root, d)
 
@@ -129,7 +135,7 @@ def main():
     Analyzer, analysis, read_trc = load_finder(a.lvr_tester)
     rows, fails, t_start = [], 0, time.time()
     for n, (name, i, pos, conf) in enumerate(rows_in):
-        ml_ms = t0[i] + pos * dt[i]
+        ml_ms = np.where(conf >= a.min_conf, t0[i] + pos * dt[i], np.nan)   # NaN = model says not there
         try:
             f_ms, n_peaks, warns = run_finder(Analyzer, analysis, read_trc, c1[i], members[i])
         except Exception as exc:                 # one bad shot must not stop the comparison; it is counted
@@ -141,7 +147,7 @@ def main():
         for k, lab in enumerate(LANDMARKS):
             both = np.isfinite(ml_ms[k]) and np.isfinite(f_ms[k])
             one = np.isfinite(ml_ms[k]) != np.isfinite(f_ms[k])
-            row[f"{lab}_ml_ms"] = round(float(ml_ms[k]), 4)
+            row[f"{lab}_ml_ms"] = round(float(ml_ms[k]), 4) if np.isfinite(ml_ms[k]) else ""
             row[f"{lab}_ml_conf"] = round(float(conf[k]), 3)
             row[f"{lab}_finder_ms"] = round(float(f_ms[k]), 4) if np.isfinite(f_ms[k]) else ""
             row[f"{lab}_disagree"] = int(one or (both and abs(ml_ms[k] - f_ms[k]) > TOL_MS))
@@ -181,8 +187,8 @@ def main():
     sum_path = OUT / "summary.json"
     sum_path.write_text(json.dumps(summary, indent=1) + "\n")
 
-    inputs = [DATA, PRED, str(RAW), a.yaml_root, str(pathlib.Path(a.lvr_tester) / "configuration/base/measurement_base.yaml")]
-    params = {"tol_ms": TOL_MS, "ml_readout": "argmax", "model": "u32l4 seed 0", "limit": a.limit}
+    inputs = [a.data, a.pred, str(RAW), a.yaml_root, str(pathlib.Path(a.lvr_tester) / "configuration/base/measurement_base.yaml")]
+    params = {"tol_ms": TOL_MS, "ml_readout": "argmax", "model": a.pred, "min_conf": a.min_conf, "limit": a.limit}
     write_meta(csv_path, inputs, params)
     write_meta(sum_path, inputs, params)
     print(json.dumps(summary, indent=1))

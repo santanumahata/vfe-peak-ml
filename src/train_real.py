@@ -39,7 +39,8 @@ def split_runs(run, n_found, seed=0):                            # - | run-level
 
 def targets(P, n, sigma):                                        # - | Gaussian heatmaps
     t = np.arange(n, dtype=np.float32)                           # O(n) | bin axis
-    return np.exp(-0.5 * ((t[None, None, :] - P[:, :, None]) / sigma) ** 2).astype(np.float32)
+    centre = np.nan_to_num(P, nan=-1e6)[:, :, None]              # - | absent landmark (NaN): target all zero
+    return np.exp(-0.5 * ((t[None, None, :] - centre) / sigma) ** 2).astype(np.float32)
     # Total: time O(5 N n), space O(5 N n)
 
 
@@ -100,6 +101,19 @@ def scores(pred, P, dt_ms):                                      # - | errors in
     return res
 
 
+def presence_scores(pred, conf, P, dt_ms, threshold=0.5):        # - | synthetic shots: some landmarks absent
+    """Position error on the landmarks that are there; confidence split between present and absent ones."""
+    there = np.isfinite(P)                                       # (N, 5) | label exists
+    e = np.abs(pred - P) * dt_ms                                 # (N, 5) | ms, NaN where absent
+    return {"n_shots": int(len(P)), "n_absent": int((~there).sum()), "threshold": threshold,
+            "present_within_0.02ms": float(np.mean(e[there] <= 0.02)),
+            "present_median_ms": float(np.median(e[there])),
+            "present_conf_ge_threshold": float(np.mean(conf[there] >= threshold)),
+            "absent_conf_lt_threshold": float(np.mean(conf[~there] < threshold)),
+            "absent_per_landmark": {LABELS[k]: int((~there[:, k]).sum()) for k in range(5)}}
+    # Total: time O(N), space O(N)
+
+
 def predict(model, X, device, batch=64, subbin=False):           # - | positions + confidences
     """argmax per channel; with subbin, refined by a parabola through the top three bins."""
     model.eval(); pos, conf = [], []
@@ -144,8 +158,10 @@ def main():
     X = normalise(d["X"]); P = d["P"].astype(np.float32); dt_ms = float(d["dt_ms"][0])
     tr, va, hard = split_runs(d["run"], d["n_found"])
     labelled = d["good"] & np.isfinite(d["P"][:, 0])               # - | all five labels known
-    tr &= labelled                                              # - | only fully labelled shots train
-    va &= labelled                                              # - | and only those are scored
+    syn = d["synthetic"] if "synthetic" in d.files else np.zeros(len(P), bool)  # - | cut-valley shots, if any
+    tr &= labelled                                              # - | only labelled shots train (synthetic included)
+    vs = va & syn                                               # - | synthetic validation, scored on its own
+    va &= labelled & ~syn                                       # - | real validation, as before
     print(f"train {tr.sum()} shots / {len(set(d['run'][tr]))} runs | "
           f"val {va.sum()} / {len(set(d['run'][va]))} | hard {hard.sum()} / "
           f"{len(set(d['run'][hard]))} on {device}", flush=True)
@@ -182,6 +198,7 @@ def main():
     pvs, _ = predict(model, X[va], device, subbin=True)
     phs, _ = predict(model, X[hard], device, subbin=True)
     hard_good = labelled[hard]
+    pvs_syn, cvs_syn = predict(model, X[vs], device) if vs.any() else (np.zeros((0, 5)), np.zeros((0, 5)))
     m = {"arch": a.arch, "params": n_params, "device": device, "epochs": a.epochs,
          "sigma_bins": a.sigma, "dt_ms": dt_ms, "wall_s": round(time.time() - t0, 1),
          "n_train": int(tr.sum()), "n_val": int(va.sum()), "n_hard": int(hard.sum()),
@@ -189,13 +206,16 @@ def main():
          "val": scores(pv, P[va], dt_ms),
          "val_subbin": scores(pvs, P[va], dt_ms),
          "hard_runs_clean_shots": scores(ph[hard_good], P[hard][hard_good], dt_ms),
+         "n_train_synthetic": int((tr & syn).sum()),
+         "val_synthetic": presence_scores(pvs_syn, cvs_syn, P[vs], dt_ms) if vs.any() else None,
          "history": hist}
     with open(f"{a.out}/metrics.json", "w") as f:
         json.dump(m, f, indent=2)
     torch.save(model.state_dict(), f"{a.out}/model.pt")
     np.savez_compressed(f"{a.out}/predictions.npz", val_pos=pv, val_conf=cv,
                         hard_pos=ph, hard_conf=ch, val_pos_subbin=pvs, hard_pos_subbin=phs,
-                        val_idx=np.flatnonzero(va),
+                        val_idx=np.flatnonzero(va), synval_pos=pvs_syn, synval_conf=cvs_syn,
+                        synval_idx=np.flatnonzero(vs),
                         hard_idx=np.flatnonzero(hard))
     print(json.dumps({k: v for k, v in m.items() if k not in ("history",)}, indent=1))
 
