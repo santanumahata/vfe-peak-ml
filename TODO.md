@@ -1,20 +1,24 @@
 # VFE-board QC peak finding (ML) — TODO
 
-**Last updated:** 2026-11-13
+**Last updated:** 2026-11-15
 
 ## Now
+- Review of disputed peaks, to make my own picks the training labels (runbook steps 22–23): 329 shots where today's finder and the cross-fit network differ by more than 0.02 ms (P0 129, P1 203, P3 2), largest difference first, in `~/Documents/vfe_peak_ml/replay/crossfit_disputed`. Every answer lands on a candidate peak (raw sample highest within ±0.05 ms; F and M move to the nearest one within 0.1 ms, N is a click on one). 5 of 329 shots answered; shots 1–4 still hold exact clicks from before the candidate rule and need redoing. `src/relabel_review.py` is written, not yet run. Uncommitted: the tester's review code (`ml-peak-review`), `src/relabel_review.py`, and the cross-fit code (`src/assemble_crossfit.py`, `--fold` in `src/train_real.py`), which has no runbook step.
 - Merge model (P0 from the finder + synthetic merged peaks, `outputs/real/merge/u32l4`) is open in the replay GUI on all held-out `incoming_A` shots: offscreen self-test passes, shots not yet looked through. Open points: P0 is lost on more real validation shots than with the old model (cause not known); merged-peak handling is checked on synthetic merges only, no real merged shot exists; almost only "A1 absent" and "A2 absent" were trained.
 - ML measurements from the network's peaks: closure test is exact on 220 shots (`outputs/real/finder_vs_ml/ml_measure_closure.json`); `lvr_tester/ml/` read through, open points not fixed (peak count never tested, P0 cap and gap guard not applied to a network P0); still uncommitted.
 
 ## Next
-1. Go through the pooled replay folder in the GUI (`~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge`, runbook step 21) and review the flagged landmarks.
-2. Find why the relabelled and merge models lose P0 on more real validation shots than the old model.
-3. Decide which findings of the 2026-11-13 code review to fix (failed `review.csv` save hidden, hand-set positions dropped on a model re-run, unsigned review rows, `--replay` taking the bench lock, among others).
-4. Run `python -m diagnostics.judge_disagreements data/archive_yaml` and go through the disagreements.
-5. Settle one P0 definition with Onur ("nearest" vs "tallest"; `docs/IDEAS.md` item 1).
-6. Commit `ml-peak-review` and push it to the private GitHub mirror.
-7. Live use: ONNX export, network run per shot in the tester, review before Confirm with Confirm locked.
-8. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
+1. Go through the disputed peaks in the GUI, started when I say "let's decide the peaks": `~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/crossfit_disputed`, 10 V row for shot 1, F / M / N per flagged peak, all 329 shots; redo shots 1–4. Picks are in `campaign_replay/review.csv`.
+2. Picks into labels, once every disputed peak is answered or left open on purpose: run `src/relabel_review.py` (written, not yet run; `data/real_shots_p0finder.npz` + `review.csv` → `data/real_shots_review.npz`; a disputed peak left without an answer drops its shot), first without `--write` for the report, then with it; retrain U-Net 32/4 seed 0; score old model, new model and finder against the corrected reference on the validation and failure runs.
+3. Review the shots where finder and network agree; both can be wrong.
+4. Go through the pooled replay folder in the GUI (`~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge`, runbook step 21) and review the flagged landmarks.
+5. Find why the relabelled and merge models lose P0 on more real validation shots than the old model.
+6. Decide which findings of the 2026-11-13 code review to fix (failed `review.csv` save hidden, hand-set positions dropped on a model re-run, unsigned review rows, `--replay` taking the bench lock, among others).
+7. Run `python -m diagnostics.judge_disagreements data/archive_yaml` and go through the disagreements.
+8. Settle one P0 definition with Onur ("nearest" vs "tallest"; `docs/IDEAS.md` item 1).
+9. Commit `ml-peak-review` and push it to the private GitHub mirror.
+10. Live use: ONNX export, network run per shot in the tester, review before Confirm with Confirm locked.
+11. Draft `docs/algorithm_vfe_peak_ml.md` (chain flowchart, step list, blocks for the four real-chain steps) and go through sign-off one step at a time.
 
 ## Blocked
 - Any further deliverable from the real-data chain — **waiting on:** sign-off of its four steps (dataset build and P0 rule, run split, training, peak readout), or a per-deliverable override as given for the 2026-11-11 PDF and the full write-up.
@@ -23,6 +27,12 @@
 - Peak 0 limits against the board distribution — **waiting on:** `scripts/peak0_reanalysis.csv` from the bench.
 
 ## Done
+- 2026-11-15 — Runbook steps 22–24 (finder vs the cross-fit network, disputed shots in the GUI, candidate-peak figure), review conventions, one gotcha; detail split by stage into three step files (main detail 23 KB, card 7.3 KB) — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL-steps-*.md`, commit b65f6e6.
+- 2026-11-15 — Decided: on disputed peaks my own pick is the reference. Picks on training-run shots become labels, picks on validation and failure runs correct the scoring reference only; a disputed peak left unanswered drops its shot — runbook Conventions, commit b65f6e6.
+- 2026-11-15 — Candidate-peak rule in the review GUI: candidates drawn as orange circles, F and M store the nearest one within 0.1 ms, N stores the nearest one in view. Offscreen self-test `replay OK`; on shot 1 the finder, network and click positions land on the expected candidates; one M pick saved on a candidate — `lvr_tester/ui/review_strip.py`, `lvr_tester/ui/plot_panel.py` (branch `ml-peak-review`, uncommitted, dated `.orig` copies kept).
+- 2026-11-15 — Candidate width chosen: 0.05 ms, by eye from a figure of three widths on two disputed shots; plain raw local maxima sit about 0.6 µs apart and cannot serve — `diagnostics/candidate_maxima.py` (commit c6bbdc5), `diagnostics/2026-11-15_real_candidate_maxima.png` (local).
+- 2026-11-15 — Replay folder of the 329 disputed shots in queue order (329 shot files, index starts at the queue's first shot), GUI self-test `replay OK` — `diagnostics/make_replay_run.py` options `--all-runs`, `--keep-order`, `idx` in `replay_index.csv` (commit c6bbdc5), `~/Documents/vfe_peak_ml/replay/crossfit_disputed`.
+- 2026-11-15 — Today's finder against the cross-fit network on all 2984 shots: 329 disputed shots (training runs 241, validation 85, failure 3), none one-sided, 100 of them above 0.04 ms — `diagnostics/crossfit_vs_finder.py` (commit c6bbdc5), `outputs/real/crossfit_vs_finder/shots.csv`, `review_queue.csv`, `summary.json` (local).
 - 2026-11-13 — Replay-folder builder committed without a default run; `--run` or `--test-type` must be given, refusals tried (exit 1) — `diagnostics/make_replay_run.py`, commit 7a709e1.
 - 2026-11-13 — Runbook steps 17–21 (P0 from the finder, synthetic merges, training, finder vs a chosen model, pooled replay), conventions for the merged-peak rule and the cut-valley generator, two gotchas — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 4d3b144.
 - 2026-11-13 — Merge model against today's finder on the held-out shots, and one replay folder with all held-out `incoming_A` shots (`replay_index.csv` maps shot number to run); GUI self-test `replay OK`, window opened — `outputs/real/finder_vs_ml_merge/` (local), `diagnostics/finder_vs_ml.py` options (commit 86b15d4), `diagnostics/make_replay_run.py` options (commit 7a709e1).
@@ -47,14 +57,14 @@
 - 2026-11-11 — Simulated data removed from the repo (toy code, outputs, deck, toy figures, toy runbook steps); `outputs/toy_gallery.png` deleted with it — commit 6ef0dc9.
 - 2026-11-11 — Runbook step 19 (full write-up build), write-up conventions — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`.
 - 2026-11-11 — Full write-up, 16-page LaTeX note from toy study to real traces, unsigned steps in every footer (override given); real numbers are generated macros, PDF and real figures local; deck hybrid panel y-range fixed — `writeup/outputs/vfe_peak_ml_writeup.pdf` (local), `writeup/make_figures.py`, `writeup/src/vfe_peak_ml_writeup.tex`, commit d2179a8.
+
+## Done (archive)
 - 2026-11-11 — ML-vs-finder PDF rebuilt, 7 pages: pages 1–6 from U-Net 32/4 seed 0 (all four within 0.02 ms 91.1 → 92.4 %, within 0.1 ms 100.0 %, A1 placed on all 26 failure shots), page 7 = model-size table over all configs with seed spread — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local), `src/report_real.py`, commits 8314d07, d837354.
 - 2026-11-11 — Seeds 1 and 2 for U-Net 16/3 and 32/4: 16/3 spreads 87.0–93.2 % (all five within 0.02 ms, sub-bin), 32/4 spreads 92.4–93.0 % — `outputs/real/sweep_seed/` (local).
 - 2026-11-11 — Runbook step 16 carries the sweep loop and seed re-runs; sweep folder naming in Conventions — commit 509116e.
 - 2026-11-11 — Model-size sweep, 7 configs at seed 0: no larger model beats the base-16 U-Net (0.46M; 93.2 % of shots with all five within 0.02 ms on sub-bin readout); U-Nets within 1 % of each other, transformers 2–3 % lower — `diagnostics.real_sweep_summary`, `outputs/real/sweep/` (local).
 - 2026-11-11 — Pushed the five code files behind runbook steps 15, 16 and 18 (`src/model.py`, `src/real_data.py`, `src/train_real.py`, `src/report_real.py`, `diagnostics/real_sweep_summary.py`), no data; `.claude-backups/` added to `.gitignore` — commit 7bafced.
 - 2026-11-11 — Runbook split into card + detail, real-trace steps 12–18 added, superseded gotchas pruned — `docs/RUNBOOK_vfe_peak_ml.md`, `docs/RUNBOOK_vfe_peak_ml-DETAIL.md`, commit 85eabef.
-
-## Done (archive)
 - 2026-11-11 — ML-vs-existing-finder comparison PDF, 6 pages, unsigned steps named on every page — `outputs/real/2026-11-11_ml_vs_finder.pdf` (local, git-ignored), `src/report_real.py`.
 - 2026-11-11 — Failure-shot check: both models place all five landmarks on every shot where the existing finder found three — `diagnostics/real_hard_cases.py`, plot local and git-ignored.
 - 2026-11-11 — Real-trace U-Net and transformer trained and scored on held-out runs; both met the done criteria (median ≤ 0.02 ms, ≥ 99 % within 0.1 ms), U-Net ahead — `outputs/real/{unet,transformer}/metrics.json` (local).
