@@ -1,6 +1,6 @@
 # VFE-board QC peak finding (ML) — Runbook (detail)
 
-**Last updated:** 2026-11-13
+**Last updated:** 2026-11-15
 **Card:** `RUNBOOK_vfe_peak_ml.md` — commands only.
 **Where it runs:** this machine, `$ENV` micromamba env, NVIDIA RTX 4070 Laptop GPU (8 GB).
 Every command runs from the repository root (`python -m src...` imports the repo's packages).
@@ -28,260 +28,17 @@ carries code only.
 Steps 17–21 retrain on the finder's own P0 and on synthetic merged peaks, compare that
 model with today's finder and show every held-out shot of one test type in the tester GUI.
 
+Steps 22–24 prepare my own review as the label source: today's finder against an
+out-of-sample network answer on every shot, the disputed shots in the GUI ordered by the size
+of the difference, and the figure behind the candidate-peak rule the review uses.
+
 ## Steps
 
-### 1. Environment
-**Known-good command:**
-```bash
-micromamba run -n $ENV pip install --force-reinstall --no-cache-dir torch --index-url https://download.pytorch.org/whl/cu126
-micromamba install -n $ENV -c conda-forge pyyaml -y
-```
-**Expect:** this prints `True`:
-```bash
-micromamba run -n $ENV python -c "import torch,yaml;print(torch.cuda.is_available())"
-```
-numpy, matplotlib, scipy and scikit-learn are already in the env.
+The commands and the expected output of each step are in three files:
 
-### 2. List and unpack the archive's metadata
-**Known-good command:**
-```bash
-tar -tf ~/Downloads/results.tar > <members.txt> && mkdir <yaml_dir> && tar -xf ~/Downloads/results.tar -C <yaml_dir> --no-same-owner --no-same-permissions --wildcards '*.yaml'
-```
-**Expect:** one line per archive member in `<members.txt>`; the per-run result YAMLs under
-`<yaml_dir>/results/<run>/`. `<yaml_dir>` is a new, empty folder outside the repo.
-
-### 3. First look at real traces
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m diagnostics.real_first_look <yaml_dir> ~/Downloads/results.tar <extract_dir> diagnostics/<date>_real_first_look.png <members.txt>
-```
-**Expect:** a PNG of shots where the finder found all four peaks and shots where it found
-three, the finder's marks overlaid (apex markers, start–end shaded).
-
-### 4. Build the real dataset
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.real_data <yaml_dir> ~/Downloads/results.tar <members.txt> data
-```
-**Expect:** progress lines, then `data/real_shots.npz  shots=… good=… runs=… P0 labelled=…`
-(P0 labelled a few shots below good). Traces are
-extracted once into `data/raw/` (skipped on rerun). The npz holds X (N, 1, 5120) in amps,
-P (N, 5) landmark bins, a 0.01 ms bin width, and the finder's raw output for every shot
-(`finder_t_ms`, `finder_lab`), failures included.
-
-### 5. Train on real traces
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.train_real --arch unet --out outputs/real/unet
-```
-Options: `--arch unet|transformer`, `--base B --levels L` (U-Net width/depth),
-`--d D --tdepth T` (transformer width/layers), `--seed S`, `--epochs`, `--sigma`.
-**Expect:** a `train … | val … | hard …` split line, 40 epoch lines, then metrics; writes
-`metrics.json` (argmax and sub-bin `val_subbin` scores, plus the clean shots of the
-failure runs), `model.pt`, `predictions.npz` into the `--out` folder.
-
-### 6. Compare model sizes
-**Known-good command:**
-```bash
-for cfg in "u16 16 3" "u32 32 3" "u64 64 3" "u32l4 32 4" "u32l5 32 5"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch unet --base $2 --levels $3 --out outputs/real/sweep/$1; done && for cfg in "t256x4 4" "t256x8 8"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch transformer --d 256 --tdepth $2 --out outputs/real/sweep/$1; done
-for s in 1 2; do for cfg in "<tag> <base> <levels>"; do set -- $cfg; micromamba run -n $ENV python -m src.train_real --arch unet --base $2 --levels $3 --seed $s --out outputs/real/sweep_seed/$1_s$s; done; done
-micromamba run -n $ENV python -m diagnostics.real_sweep_summary
-```
-**Expect:** the seven seed-0 runs take about 55 min in total on the RTX 4070 (2 min for
-base 16 up to 12 min for base 64); the second line re-trains the top configs with new
-seeds. The summary prints one row per folder under `outputs/real/sweep*/`: parameters,
-training time, seed, and argmax / sub-bin agreement with the labels.
-
-### 7. Failure shots
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m diagnostics.real_hard_cases outputs/real/unet outputs/real/transformer diagnostics/<date>_real_hard_cases.png
-```
-**Expect:** per failure run, the models' A1 time and its shot-to-shot spread, and a PNG of
-the failure shots with each model's marks.
-
-### 8. ML vs finder PDF
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.report_real outputs/real/<date>_ml_vs_finder.pdf outputs/real/sweep/u32l4 data/archive_yaml
-```
-The second argument is the U-Net folder for pages 1–6 (default `outputs/real/unet`); the
-third is the result-YAML folder from step 10, used for the trace zooms.
-**Expect:** a 7-page PDF (summary, agreement, clean shots, failure shots, repeatability,
-confidence, model size), plus three pages when `outputs/real/finder_vs_ml/shots.csv` from
-step 11 exists (today's finder vs the network: per-landmark table and Vin bars, P0 zooms,
-A1 zooms), so 10 pages. The summary and sweep rows are printed. Every page names the
-unsigned algorithm steps; page 1 names the U-Net's width, depth, size and seed.
-
-### 9. Full write-up (LaTeX note)
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m writeup.make_figures && cd writeup/src && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs vfe_peak_ml_writeup.tex
-```
-Needs steps 5 (`outputs/real/transformer`) and 6 (`outputs/real/sweep/u32l4` and the seed
-re-runs).
-**Expect:** 8 PNG paths and
-`perpeak_table.tex`, `sweep_table.tex`, `numbers.tex` (`writeup/plots/real/`), no assertion
-error; `writeup/outputs/vfe_peak_ml_writeup.pdf`, 11 pages, real data only;
-`grep -E "LaTeX Warning|Overfull"` on the log shows only one 2.6 pt overfull line (Method,
-read-out paragraph). Every page footer names the unsigned steps.
-
-### 10. Result YAMLs into the repo's data folder
-**Known-good command:**
-```bash
-mkdir -p data/archive_yaml && tar -xf ~/Downloads/results.tar -C data/archive_yaml --no-same-owner --no-same-permissions --wildcards 'results/*/*.yaml'
-```
-**Expect:** one folder per run, `data/archive_yaml/results/<run>/<run>.yaml`. `data/` is
-git-ignored and survives reboots, unlike `/tmp`. Steps 8, 11 and 13 take `data/archive_yaml`
-as their YAML root. The archive is untrusted: YAMLs are read with `safe_load` only and
-nothing from it is run.
-
-### 11. Today's finder vs the network on the held-out shots
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m diagnostics.finder_vs_ml data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester
-```
-`--limit N` runs the first N shots only (smoke test).
-**Expect:** missing Vin (C1) traces extracted into `data/raw/` in one tar pass, progress every
-100 shots (about 10 min for all held-out and failure shots), the summary printed, and
-`outputs/real/finder_vs_ml/shots.csv` (per shot and landmark: network time and confidence,
-today's finder time, a disagree flag at 0.02 ms, the archived finder time) plus
-`summary.json`, each with a `.meta` sidecar. `finder_exceptions` is 0, and on clean shots the
-self-check shows today's finder reproducing the archived A1–B2 times.
-
-### 12. Tester GUI on this laptop
-**Known-good command:**
-```bash
-~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest; tail -3 ~/Documents/vfe_peak_ml/lvr_tester_gui.log
-```
-Desktop icon `~/.local/share/applications/lvr-tester.desktop` (copy on `~/Desktop`) runs the
-same launcher without arguments.
-**Expect:** a `selftest OK — IDLE, START blocked by: …` line. START stays blocked without
-instruments, so nothing can be run, confirmed or uploaded from the laptop.
-
-### 13. Build a replay folder from an archived run
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --run <run>
-```
-`--out` defaults to `~/Documents/vfe_peak_ml/replay/<run>`.
-**Expect:** one line per shot (Vin, shot, network vs finder per landmark) and the output
-folder. Under `<out>/campaign_replay/`: `shots/shot_NNNNN_V<vin>V.npz` (the layout the
-tester's runner writes), `campaign_peaks.csv` and `campaign_shot_metrics.csv` from today's
-finder, `ml_peaks.csv` from the network, each with a `.meta` sidecar. An existing
-`review.csv` is kept and a WARNING printed.
-
-### 14. Replay in the GUI, side by side, with the peak review
-**Known-good command:**
-```bash
-~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/<run>; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/<run>
-```
-Icon: `~/.local/share/applications/lvr-tester-replay.desktop` (copy on `~/Desktop`).
-**Expect:** `replay OK — <n> traces, hint: …` in the log, then the window. Each "Trace <v> V"
-entry shows the finder (left) and the network (right) on a shared time axis, zoomed to the
-landmarks; **Zoom out** toggles the full trace. A network landmark more than 0.02 ms from the
-finder's is red. The review strip under the plots lists each flagged landmark of the shot
-with Finder / ML / Neither and Prev / Next; **F / M / N** work after a click into the plot;
-Neither waits for a click on the true position (Esc cancels). Each choice is written to
-`campaign_replay/review.csv` at once.
-
-### 15. Today's finder on every shot
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -W ignore -m diagnostics.finder_all_shots data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --workers 12 > outputs/real/finder_all/full_run.log 2>&1
-```
-`--limit N` runs the first N shots only; `-W ignore` keeps scipy's `PeakPropertyWarning`
-lines, one per worker and shot, out of the log. Create `outputs/real/finder_all/` first when
-redirecting into it.
-**Expect:** `<N> shots, <n> Vin traces extracted` (missing C1 traces pulled into `data/raw/`
-in one tar pass), a progress line every 250 shots (about 30 s per 250 with 12 workers), then
-`shots … peaks found per shot {…} P0 kind {…}` and the path of
-`outputs/real/finder_all/shots.csv` with its `.meta`. One row per shot in npz order (`idx` =
-row of `data/real_shots.npz`): peak count, Vin crossing, P0 time / kind (`turnover` or
-`shoulder`) / amplitude, and for each of the four peaks apex time, amplitude, pulse start,
-pulse end and pulse level; blank = no answer. Check: with `--limit 16`, the P0–P4 times of a
-held-out `idx` equal those in step 11's `shots.csv`.
-
-### 16. Limits against the production-card distribution
-**Known-good command:**
-```bash
-mkdir -p ~/Documents/vfe_peak_ml/limits_study/data/records && tar -xf ~/Downloads/results.tar -C ~/Documents/vfe_peak_ml/limits_study/data/records --no-same-owner --no-same-permissions --wildcards 'results/*_P1_B[12]_*/*.yaml'
-cd ~/Documents/vfe_peak_ml/limits_study && micromamba run -n $ENV python diagnostics/2026-11-13_limits_distribution.py data/records ../lvr-tester/configuration/test_types/incoming_A.yaml diagnostics/2026-11-13_limits_distribution
-```
-Runs from `~/Documents/vfe_peak_ml/limits_study/`, not the repo root: the script, the
-extracted records and the outputs live there, outside both repositories.
-**Expect:** `boards kept: … runs skipped: … incomplete points: …`, one line per skipped run
-(an earlier run of a retested board) and per incomplete voltage point, then the two output
-paths. The CSV has one row per quantity and voltage (17 quantities × 4 voltages): number of
-boards, min / median / max, mean, std, robust sigma (1.4826 × MAD), the current window, boards
-outside it, and the margin from each window edge to the nearest board. The PDF has one page
-per quantity, four voltage panels, current limits dashed. Both carry a `.meta` sidecar and
-name the unsigned steps.
-
-### 17. P0 label from the finder
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.relabel_p0_finder
-```
-**Expect:** one line `data/real_shots_p0finder.npz shots=… labelled=… newly_labelled_p0=…
-moved_over_0.02ms=… moved_over_0.1ms=…`, then the path; a `.meta` beside it. Needs step 15's
-`outputs/real/finder_all/shots.csv`. The script stops if the output exists, if a card peak in
-the dataset differs from today's finder by more than 0.001 ms, or if a new P0 is outside the
-trace or not before A1. Only `P[:, 0]` changes, on the labelled shots; the old value is kept
-as `P0_rule`, the finder's `turnover` / `shoulder` as `P0_kind`. `run`, `n_found` and `good`
-are untouched, so the run split is the same. Finder-failure shots stay unlabelled.
-
-### 18. Synthetic merged peaks
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.make_merges
-```
-**Expect:** one line `data/real_shots_merge.npz merge_depth_A=0.3 max_depth_A=0.7 seed=0
-real=… synthetic=… skipped=0 merged=… from_train=… from_val=… merged_by_pair={…}`, then the
-path; a `.meta` beside it. About half the synthetic shots come out merged. Real rows come
-first and are identical to step 17's file; one synthetic shot is appended per labelled
-training or validation shot, in the same run; hard-test runs get none. New arrays:
-`synthetic`, `src_idx`, `merge_pair` (1 = A1+B1, 2 = B1+A2, 3 = A2+B2), `merge_depth_A`;
-`finder_t_ms` is NaN on synthetic rows. A merged shot has exactly one NaN landmark.
-
-### 19. Train on the relabelled and on the merged dataset
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -m src.train_real --arch unet --base 32 --levels 4 --data data/real_shots_p0finder.npz --out outputs/real/p0finder/u32l4 > outputs/real/p0finder_u32l4.log 2>&1
-micromamba run -n $ENV python -m src.train_real --arch unet --base 32 --levels 4 --data data/real_shots_merge.npz --out outputs/real/merge/u32l4 > outputs/real/merge_u32l4.log 2>&1
-```
-**Expect:** as step 5; about 8 min for the first and 15 min for the second on the laptop GPU
-(the second has twice the training shots). The first changes only the P0 label, the second
-adds the merges, so a change on real shots can be assigned to one of them. With a dataset
-that has a `synthetic` array, `metrics.json` gains `n_train_synthetic` and a `val_synthetic`
-block (position error on the landmarks that are there, share of present landmarks with
-confidence ≥ 0.5, share of absent ones below it), and `predictions.npz` gains `synval_pos`,
-`synval_conf`, `synval_idx`. `val` and `val_idx` cover real validation shots only, so they
-stay comparable with earlier models.
-
-### 20. Today's finder vs a chosen model
-**Known-good command:**
-```bash
-mkdir -p outputs/real/finder_vs_ml_merge && micromamba run -n $ENV python -W ignore -m diagnostics.finder_vs_ml data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --data data/real_shots_p0finder.npz --pred outputs/real/merge/u32l4/predictions.npz --out outputs/real/finder_vs_ml_merge --min-conf 0.5 > outputs/real/finder_vs_ml_merge/full_run.log 2>&1
-```
-**Expect:** as step 11 (about 10 min), written to the `--out` folder; step 11's own folder is
-untouched. `--min-conf` blanks a model landmark whose confidence is below it (the model says
-it is not there); a blank on one side only counts as a disagreement. `--limit 8` is a quick
-check. Without the options the script behaves as in step 11.
-
-### 21. All held-out shots of one test type in the GUI
-**Known-good command:**
-```bash
-micromamba run -n $ENV python -W ignore -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --table outputs/real/finder_vs_ml_merge/shots.csv --test-type incoming_A --out ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
-~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
-```
-**Expect:** first `<n> runs of incoming_A; left out: [...]` (runs of another test type), one
-line per shot, then the folder path; about 10 min and about 3 MB per shot. Shots are ordered
-by voltage, run, shot; `campaign_replay/replay_index.csv` maps each shot number to run,
-voltage, shot and set. The self-test prints `replay OK — 4 traces …` and
-`replay table OK — 6 columns, … rows`; the last command opens the window as in step 14.
-`--table` picks the comparison folder of step 20; without `--test-type` the script builds one
-run as in step 13.
+- Steps 1–9, archive, dataset, training, report: `RUNBOOK_vfe_peak_ml-DETAIL-steps-01-09.md`
+- Steps 10–16, tester, finder comparison, replay, limits: `RUNBOOK_vfe_peak_ml-DETAIL-steps-10-16.md`
+- Steps 17–24, relabelling, merged peaks, review: `RUNBOOK_vfe_peak_ml-DETAIL-steps-17-24.md`
 
 ## Conventions
 
@@ -325,6 +82,31 @@ run as in step 13.
 - **One replay folder holds one test type.** The GUI takes one test type and one set of peak
   names per folder, so pooled folders are built per test type (step 21). Their verdict table
   pools many boards and describes no single board; the per-shot view and the review do.
+  Exception: the review-queue folder (step 23) pools every test type and takes the first
+  row's; only its positions are reviewed, its table is ignored.
+- **My picks are the reference (decided 2026-11-15).** The labels are the finder's output, so
+  a network trained on them cannot be shown to be better than the finder, and the current
+  trace holds no physical truth for a peak position (the Enable signals are not recorded in
+  production). On the peaks where finder and network differ, the label becomes my choice.
+  The review covers every shot, with the network side from the cross-fit answers (step 22):
+  picks on training-run shots become training labels; picks on validation and failure runs
+  only correct the reference the models are scored against. Shots where the two agree get
+  their own review later.
+- **Review queue.** Disputed = more than 0.02 ms apart, or a landmark the finder did not give;
+  shots ordered one-sided first, then by their largest disputed difference, descending. No
+  confidence cut on the network in step 22, unlike step 20.
+- **Candidate peaks (decided 2026-11-15).** A candidate is a raw sample that is the highest
+  within ±0.05 ms of itself; nothing is smoothed. Every stored answer is a candidate's time:
+  Finder / ML move to the nearest one within 0.1 ms, Neither is a click that takes the nearest
+  one in view, and the click's own x is never stored. Plain raw local maxima do not work as
+  candidates: they sit under a microsecond apart on slopes and in valleys alike, so the
+  nearest one is where the click was. 0.05 ms was chosen by eye from step 24's figure. The
+  rule lives in `candidate_peaks` and `nearest_candidate` in the tester's
+  `lvr_tester/ui/review_strip.py`.
+- **A disputed peak left unanswered drops its shot (decided 2026-11-15).** Neither followed by
+  Esc writes no row, so an unanswered peak cannot be told from one not reached. Once I declare
+  the review done, an unanswered disputed peak means no marked peak was right, and the whole
+  shot leaves training. `src/relabel_review.py` applies this; it is written and not yet run.
 - **Real binning:** traces stored at 200 ns are averaged in blocks of 50 into 10 µs bins and
   padded to 5120.
 - **Split by run, never by shot** — shots inside a run are near-copies. Runs containing a
@@ -358,14 +140,16 @@ run as in step 13.
 - **Tester changes live on a local branch.** `ml-peak-review` in
   `~/Documents/vfe_peak_ml/lvr-tester`, uncommitted, not pushed anywhere. Onur's repository
   stays private; it goes to my private GitHub first and to Onur's only with his agreement.
-  The launcher `run_lvr_tester.sh` sits outside his repo.
+  The launcher `run_lvr_tester.sh` sits outside his repo. Git holds no copy of the
+  uncommitted files, so an edit to them is preceded by a dated `.orig` copy in the tester's
+  backup folder.
 - **`runner_python` falls back off Windows.** `MainWindow._runner_python` uses the configured
   interpreter on Windows or when it exists, else `sys.executable`; the DB-upload and sync
   calls go through it too.
 - **Disagree = more than 0.02 ms** between the network and the finder for a landmark
   (`ML_TOL_MS` in `plot_panel.py`, the same flag as `finder_vs_ml`).
 - **Review rules.** The operator chooses only where the two disagree, one choice per
-  landmark (finder / ml / neither + clicked time); agreed landmarks are saved as `agree` with
+  landmark (finder / ml / neither, stored as a candidate peak's time); agreed landmarks are saved as `agree` with
   the finder's value. `review.csv` columns: shot_index, vin_setting, landmark, finder_ms,
   ml_ms, choice, chosen_ms, operator, timestamp; written atomically on the first choice;
   resuming needs the saved finder and network times to match within 1e-3 ms. A reviewed
@@ -454,6 +238,11 @@ run as in step 13.
   `--selftest --replay`.
   **Cause:** a relative replay path; the launcher changes into the tester folder first.
   **Fix:** give the replay folder as an absolute path.
+- **Symptom:** an `awk -F,` lookup of the last column of one of the CSVs by its header name
+  prints the whole line instead of the value.
+  **Cause:** Python's `csv` writer ends lines with `\r\n`, so the last header carries a `\r`
+  and the name does not match.
+  **Fix:** pipe through `tr -d '\r'` first.
 
 ## Changelog
 
@@ -510,3 +299,11 @@ run as in step 13.
   pooled replay folders; two gotchas (dataset row count in the comparison, relative replay path).
 - 2026-11-13 — `diagnostics/make_replay_run.py` committed without a default run (`--run` or
   `--test-type` must be given); the convention that kept it untracked is replaced.
+- 2026-11-15 — Steps 22–24 added: finder vs the cross-fit network on every shot with the review
+  queue (`diagnostics/crossfit_vs_finder.py`), the disputed shots in the GUI in queue order
+  (`make_replay_run.py --all-runs --keep-order`, `idx` in `replay_index.csv`), the
+  candidate-peak figure. Steps 14 and 21 updated for the candidate rule and `idx`.
+  Conventions: my picks as the reference, review queue, candidate peaks, unanswered peak drops
+  the shot, pooled queue folder, `.orig` before editing the tester's uncommitted files. One
+  gotcha added (`\r` in the last CSV column). The detail passed 40 KB, so the Steps section
+  moved verbatim into three per-stage files (`-DETAIL-steps-01-09`, `-10-16`, `-17-24`).

@@ -1,6 +1,7 @@
 # VFE-board QC peak finding (ML) — Quick Reference
 
-**Detail:** `RUNBOOK_vfe_peak_ml-DETAIL.md` — expected output, gotchas, conventions, changelog.
+**Detail:** `RUNBOOK_vfe_peak_ml-DETAIL.md` — overview, conventions, gotchas, changelog.
+**Expected output per step:** steps 1–9 `RUNBOOK_vfe_peak_ml-DETAIL-steps-01-09.md`, steps 10–16 `RUNBOOK_vfe_peak_ml-DETAIL-steps-10-16.md`, steps 17–24 `RUNBOOK_vfe_peak_ml-DETAIL-steps-17-24.md`.
 **Where it runs:** this machine, `$ENV` micromamba env, RTX 4070 GPU; every command from the repo root.
 **Working copy:** `~/Documents/vfe_peak_ml/vfe-peak-ml` (clone + local data and outputs).
 
@@ -113,4 +114,20 @@ mkdir -p outputs/real/finder_vs_ml_merge && micromamba run -n $ENV python -W ign
 ```bash
 micromamba run -n $ENV python -W ignore -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --table outputs/real/finder_vs_ml_merge/shots.csv --test-type incoming_A --out ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
 ~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/all_heldout_incoming_A_merge
+```
+
+### 22. Today's finder vs the cross-fit network on every shot
+```bash
+micromamba run -n $ENV python -m diagnostics.crossfit_vs_finder
+```
+
+### 23. Disputed shots in the GUI, largest difference first
+```bash
+micromamba run -n $ENV python -W ignore -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --table outputs/real/crossfit_vs_finder/review_queue.csv --all-runs --keep-order --out ~/Documents/vfe_peak_ml/replay/crossfit_disputed > outputs/real/crossfit_vs_finder/replay_build.log 2>&1
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/crossfit_disputed; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/crossfit_disputed
+```
+
+### 24. Candidate-peak figure
+```bash
+micromamba run -n $ENV python -m diagnostics.candidate_maxima ~/Documents/vfe_peak_ml/replay/crossfit_disputed diagnostics/<date>_real_candidate_maxima.png
 ```
