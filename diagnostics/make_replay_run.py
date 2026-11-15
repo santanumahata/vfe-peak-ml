@@ -8,9 +8,12 @@
 
   python -m diagnostics.make_replay_run <yaml_root> <lvr_tester_dir> --run RUN [--out DIR] [--table CSV]
   python -m diagnostics.make_replay_run <yaml_root> <lvr_tester_dir> --test-type TYPE --out DIR [--table CSV]
+  python -m diagnostics.make_replay_run <yaml_root> <lvr_tester_dir> --all-runs --out DIR --table CSV [--keep-order]
 
-Exactly one of --run (one run) and --test-type (every run of that test type in the table, pooled) is given.
-Every shot of the chosen run(s) in shots.csv is kept; shot_index runs 1..N by numeric Vin, then run, then shot.
+Exactly one of --run (one run), --test-type (every run of that test type in the table, pooled) and --all-runs
+(every row of the table, pooled) is given.
+Every shot of the chosen run(s) in shots.csv is kept; shot_index runs 1..N by numeric Vin, then run, then shot,
+or with --keep-order in the table's own row order.
 Old shots/*.npz and the generated files are removed first; a review.csv is left alone.
 The finder is run LIVE with today's settings; the ML times come from shots.csv.
 The layout mirrors campaign.py (npz keys <signal>__t/__y/__unit, peaks CSV columns).
@@ -45,11 +48,16 @@ def num(row, key):
     # Total: time O(1), space O(1)
 
 
-def pick_shots(table, run, yaml_root, test_type=None):
-    """Shots of one run, or (test_type given) of every run of that test type; by numeric Vin, run, shot."""
+def pick_shots(table, run, yaml_root, test_type=None, all_runs=False, keep_order=False):
+    """Shots of one run, of every run of a test type, or (all_runs) every row of the table.
+
+    Ordered by numeric Vin, run, shot, unless keep_order leaves the table's own row order.
+    """
     with open(table, newline="") as fh:
         rows = list(csv.DictReader(fh))
-    if test_type:
+    if all_runs:
+        print(f"all {len(rows)} rows of {table}, {len({r['run'] for r in rows})} runs")
+    elif test_type:
         kinds = {r: run_identity(yaml_root, r)["test_type"] for r in sorted({x["run"] for x in rows})}
         left_out = sorted(r for r, k in kinds.items() if k != test_type)
         print(f"{len(kinds) - len(left_out)} runs of {test_type}; left out: {left_out}")
@@ -58,6 +66,8 @@ def pick_shots(table, run, yaml_root, test_type=None):
         rows = [r for r in rows if r["run"] == run]
     if not rows:
         raise SystemExit(f"no rows for run {run} / test type {test_type} in {table}")
+    if keep_order:
+        return rows
     return sorted(rows, key=lambda r: (vin_value(r["vin"]), r["run"], int(r["shot"])))
     # Total: time O(rows log rows), space O(rows)
 
@@ -108,11 +118,13 @@ def main():
     ap.add_argument("--out", default=None)
     ap.add_argument("--table", default=str(OUT / "shots.csv"))  # finder-vs-ML table to take the ML times from
     ap.add_argument("--test-type", default=None)                # all held-out runs of this test type in one folder
+    ap.add_argument("--all-runs", action="store_true")          # every row of --table, whatever run or test type
+    ap.add_argument("--keep-order", action="store_true")        # shot_index follows the table's row order
     a = ap.parse_args()
-    if bool(a.run) == bool(a.test_type):                        # no default run: the choice is always stated
-        raise SystemExit("give exactly one of --run and --test-type")
-    if a.test_type and not a.out:
-        raise SystemExit("--test-type needs --out")
+    if sum(map(bool, (a.run, a.test_type, a.all_runs))) != 1:   # no default run: the choice is always stated
+        raise SystemExit("give exactly one of --run, --test-type and --all-runs")
+    if (a.test_type or a.all_runs) and not a.out:
+        raise SystemExit("--test-type and --all-runs need --out")
     out = pathlib.Path(a.out) if a.out else pathlib.Path.home() / "Documents" / "vfe_peak_ml" / "replay" / a.run
     camp = out / "campaign_replay"
     (camp / "shots").mkdir(parents=True, exist_ok=True)
@@ -130,9 +142,10 @@ def main():
     Analyzer, analysis, read_trc = load_finder(a.lvr_tester)
 
     peak_rows, metric_rows, ml_rows, mlp_rows, mlm_rows, index_rows = [], [], [], [], [], []
-    picked = pick_shots(a.table, a.run, a.yaml_root, a.test_type)
+    picked = pick_shots(a.table, a.run, a.yaml_root, a.test_type, a.all_runs, a.keep_order)
     for k, r in enumerate(picked, start=1):
-        index_rows.append({"shot_index": k, "run": r["run"], "vin_setting": r["vin"], "shot": r["shot"], "set": r["set"]})
+        index_rows.append({"shot_index": k, "idx": r["idx"], "run": r["run"], "vin_setting": r["vin"],
+                           "shot": r["shot"], "set": r["set"]})
         vin = vin_value(r["vin"])
         c4 = members[int(r["idx"])]
         c1 = c4.replace("/C4--", "/C1--")
@@ -155,18 +168,20 @@ def main():
             f"{lab} ml {r[f'{lab}_ml_ms']} / fnd {r[f'{lab}_finder_ms'] or '-'}" for lab in LANDMARKS))
 
     ident = run_identity(a.yaml_root, picked[0]["run"])
-    if a.test_type:                                              # many boards in one folder: say so in the identity
+    if a.test_type or a.all_runs:                                # many boards in one folder: say so in the identity
         cards = [run_identity(a.yaml_root, r)["card_type"] for r in sorted({x["run"] for x in picked})]
         cards = [c for c in cards if c]                          # a run without a board serial names no card type
         ident["card_type"] = max(set(cards), key=cards.count) if cards else None
-        ident["run"] = f"all held-out {a.test_type} runs ({len({r['run'] for r in picked})}), pooled"
+        n_runs = len({r["run"] for r in picked})
+        ident["run"] = (f"all held-out {a.test_type} runs ({n_runs}), pooled" if a.test_type
+                        else f"all runs of the table ({n_runs}), pooled; test type is the first row's")
     (camp / "replay.yaml").write_text(yaml.safe_dump(ident, sort_keys=False))
     files = {"campaign_peaks.csv": (columns(peak_rows), peak_rows),
              "campaign_shot_metrics.csv": (columns(metric_rows), metric_rows),
              "ml_peaks.csv": (["shot_index", "vin_setting", "landmark", "time_ms", "conf"], ml_rows),
              "ml/campaign_peaks.csv": (columns(peak_rows), mlp_rows),
              "ml/campaign_shot_metrics.csv": (columns(metric_rows), mlm_rows),
-             "replay_index.csv": (["shot_index", "run", "vin_setting", "shot", "set"], index_rows)}
+             "replay_index.csv": (["shot_index", "idx", "run", "vin_setting", "shot", "set"], index_rows)}
     inputs = [a.table, "data/real_shots.npz", str(RAW), a.yaml_root]
     for name, (cols, rows) in files.items():
         write_csv(camp / name, cols, rows)
