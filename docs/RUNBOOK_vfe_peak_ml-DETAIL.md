@@ -32,13 +32,19 @@ Steps 22–24 prepare my own review as the label source: today's finder against 
 out-of-sample network answer on every shot, the disputed shots in the GUI ordered by the size
 of the difference, and the figure behind the candidate-peak rule the review uses.
 
+Steps 25–31 finish the review and use it: the disputes that hold no decision are found and
+answered automatically, the rest by a written rule; the answers become labels, the network is
+retrained on them and scored with the finder against the corrected reference, the shots that
+held a decision get their own GUI folder, and a note for my guide is built.
+
 ## Steps
 
-The commands and the expected output of each step are in three files:
+The commands and the expected output of each step are in four files:
 
 - Steps 1–9, archive, dataset, training, report: `RUNBOOK_vfe_peak_ml-DETAIL-steps-01-09.md`
 - Steps 10–16, tester, finder comparison, replay, limits: `RUNBOOK_vfe_peak_ml-DETAIL-steps-10-16.md`
 - Steps 17–24, relabelling, merged peaks, review: `RUNBOOK_vfe_peak_ml-DETAIL-steps-17-24.md`
+- Steps 25–31, review answers, retraining, review note: `RUNBOOK_vfe_peak_ml-DETAIL-steps-25-31.md`
 
 ## Conventions
 
@@ -106,7 +112,27 @@ The commands and the expected output of each step are in three files:
 - **A disputed peak left unanswered drops its shot (decided 2026-11-15).** Neither followed by
   Esc writes no row, so an unanswered peak cannot be told from one not reached. Once I declare
   the review done, an unanswered disputed peak means no marked peak was right, and the whole
-  shot leaves training. `src/relabel_review.py` applies this; it is written and not yet run.
+  shot leaves training. `src/relabel_review.py` applies this (first run 2026-11-15, step 27).
+- **A dispute on one candidate is answered automatically (decided 2026-11-15).** Where the
+  finder time and the network time snap to the same candidate peak, Finder and ML would store
+  the same time, so the answer is written without me (step 26, operator
+  `auto_same_candidate`). Rows written by a script always carry their own operator tag, so they
+  are never counted as my picks; `src/relabel_review.py` counts them by that tag.
+- **P0 rule for the remaining disputes (decided 2026-11-15).** A peak left of A1 that is very
+  small is not taken; a sizable one is P0. Written as: of the two marked candidates, one less
+  than 0.10 A above the baseline (median current 6–4 ms before the finder's A1) is dropped; of
+  those left, the taller raw sample wins (equal: the earlier); none left → the shot has no
+  sizable P0 and leaves training. My own answers that sit on a candidate are kept; raw clicks
+  are replaced by the rule (`src/answer_by_rule.py`, operator `auto_rule_tallest`). 0.10 A is my
+  choice, set between the dropped bumps and the next candidate up; it is an unsigned step.
+- **Decisions get their own folder.** The shots with at least one peak not classed `same`
+  (step 25) are rebuilt into `replay/crossfit_decisions` (step 30) with the existing answers
+  copied in by `idx`. Answers changed there stay in that folder's `review.csv` until merged back
+  into `crossfit_disputed`, which is the folder `src/relabel_review.py` reads.
+- **Scores against the review use the argmax read-out.** Network positions are whole 10 µs
+  bins; the saved sub-bin position (`val_pos_subbin`) is not used in step 29.
+- **Diagrams for notes are drawn locally in TikZ.** Mermaid rendering goes through the public
+  mermaid.ink service, and the notes carry unpublished analysis details.
 - **Real binning:** traces stored at 200 ns are averaged in blocks of 50 into 10 µs bins and
   padded to 5120.
 - **Split by run, never by shot** — shots inside a run are near-copies. Runs containing a
@@ -175,7 +201,7 @@ The commands and the expected output of each step are in three files:
   every shot left out.
 - **Algorithm steps are unsigned.** No `docs/algorithm_*.md` exists yet; any deliverable
   names the unsigned steps (dataset build and P0 rule, run split, training, peak readout,
-  synthetic merge generation).
+  synthetic merge generation, the review rule with its 0.10 A floor).
 
 ## Gotchas
 
@@ -307,3 +333,10 @@ The commands and the expected output of each step are in three files:
   the shot, pooled queue folder, `.orig` before editing the tester's uncommitted files. One
   gotcha added (`\r` in the last CSV column). The detail passed 40 KB, so the Steps section
   moved verbatim into three per-stage files (`-DETAIL-steps-01-09`, `-10-16`, `-17-24`).
+- 2026-11-16 — Steps 25–31 added in `-DETAIL-steps-25-31.md`: same-candidate check, automatic
+  answers (same candidate, then the P0 rule with the 0.10 A floor), review answers into labels,
+  retraining on them, scoring against the review reference, decision-only GUI folder, review
+  note with TikZ diagrams. Conventions: automatic answers and their operator tags, P0 rule,
+  decision folder, argmax read-out in scoring, TikZ for diagrams; the unanswered-peak
+  convention now records its first run; review rule added to the unsigned steps. No new
+  gotchas: no step failed this session.

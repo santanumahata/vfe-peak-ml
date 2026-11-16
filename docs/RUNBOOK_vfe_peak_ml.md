@@ -1,7 +1,7 @@
 # VFE-board QC peak finding (ML) — Quick Reference
 
 **Detail:** `RUNBOOK_vfe_peak_ml-DETAIL.md` — overview, conventions, gotchas, changelog.
-**Expected output per step:** steps 1–9 `RUNBOOK_vfe_peak_ml-DETAIL-steps-01-09.md`, steps 10–16 `RUNBOOK_vfe_peak_ml-DETAIL-steps-10-16.md`, steps 17–24 `RUNBOOK_vfe_peak_ml-DETAIL-steps-17-24.md`.
+**Expected output per step:** steps 1–9 `RUNBOOK_vfe_peak_ml-DETAIL-steps-01-09.md`, steps 10–16 `RUNBOOK_vfe_peak_ml-DETAIL-steps-10-16.md`, steps 17–24 `RUNBOOK_vfe_peak_ml-DETAIL-steps-17-24.md`, steps 25–31 `RUNBOOK_vfe_peak_ml-DETAIL-steps-25-31.md`.
 **Where it runs:** this machine, `$ENV` micromamba env, RTX 4070 GPU; every command from the repo root.
 **Working copy:** `~/Documents/vfe_peak_ml/vfe-peak-ml` (clone + local data and outputs).
 
@@ -130,4 +130,46 @@ micromamba run -n $ENV python -W ignore -m diagnostics.make_replay_run data/arch
 ### 24. Candidate-peak figure
 ```bash
 micromamba run -n $ENV python -m diagnostics.candidate_maxima ~/Documents/vfe_peak_ml/replay/crossfit_disputed diagnostics/<date>_real_candidate_maxima.png
+```
+
+### 25. Which disputed peaks hold a decision
+```bash
+micromamba run -n $ENV python -m diagnostics.same_candidate ~/Documents/vfe_peak_ml/replay/crossfit_disputed ~/Documents/vfe_peak_ml/lvr-tester
+```
+
+### 26. Answer the disputes that need no eye
+```bash
+micromamba run -n $ENV python -m src.answer_same_candidate ~/Documents/vfe_peak_ml/replay/crossfit_disputed ~/Documents/vfe_peak_ml/lvr-tester
+micromamba run -n $ENV python -m src.answer_same_candidate ~/Documents/vfe_peak_ml/replay/crossfit_disputed ~/Documents/vfe_peak_ml/lvr-tester --write
+micromamba run -n $ENV python -m src.answer_by_rule ~/Documents/vfe_peak_ml/replay/crossfit_disputed ~/Documents/vfe_peak_ml/lvr-tester
+micromamba run -n $ENV python -m src.answer_by_rule ~/Documents/vfe_peak_ml/replay/crossfit_disputed ~/Documents/vfe_peak_ml/lvr-tester --write
+```
+
+### 27. Review answers into labels
+```bash
+micromamba run -n $ENV python -m src.relabel_review ~/Documents/vfe_peak_ml/replay/crossfit_disputed ~/Documents/vfe_peak_ml/lvr-tester
+micromamba run -n $ENV python -m src.relabel_review ~/Documents/vfe_peak_ml/replay/crossfit_disputed ~/Documents/vfe_peak_ml/lvr-tester --write
+```
+
+### 28. Retrain on the review labels
+```bash
+mkdir -p outputs/real/review && micromamba run -n $ENV python -m src.train_real --arch unet --base 32 --levels 4 --data data/real_shots_review.npz --out outputs/real/review/u32l4 > outputs/real/review_u32l4.log 2>&1
+```
+
+### 29. Finder, old and retrained model against the review reference
+```bash
+micromamba run -n $ENV python -m diagnostics.score_vs_review
+```
+
+### 30. Only the shots that hold a decision, in the GUI
+```bash
+micromamba run -n $ENV python -W ignore -m diagnostics.make_replay_run data/archive_yaml ~/Documents/vfe_peak_ml/lvr-tester --table outputs/real/crossfit_vs_finder/review_queue_decisions.csv --all-runs --keep-order --out ~/Documents/vfe_peak_ml/replay/crossfit_decisions > outputs/real/crossfit_vs_finder/replay_decisions_build.log 2>&1
+~/Documents/vfe_peak_ml/run_lvr_tester.sh --selftest --replay ~/Documents/vfe_peak_ml/replay/crossfit_decisions; tail -2 ~/Documents/vfe_peak_ml/lvr_tester_gui.log; ~/Documents/vfe_peak_ml/run_lvr_tester.sh --replay ~/Documents/vfe_peak_ml/replay/crossfit_decisions
+```
+
+### 31. Review note for my guide
+```bash
+micromamba run -n $ENV python -m writeup.make_review_figures
+micromamba run -n $ENV python -m writeup.make_training_figures
+cd writeup/src && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs review_labels_note.tex && pdflatex -interaction=nonstopmode -halt-on-error -output-directory=../outputs review_labels_note.tex
 ```
